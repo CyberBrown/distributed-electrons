@@ -1,0 +1,33 @@
+# Root Cloudflare Workers Configuration
+# This is a base configuration - individual workers have their own wrangler.toml files
+
+name = "cloudflare-multiagent-system"
+compatibility_date = "2024-11-20"
+node_compat = true
+
+# Workers will be defined in their respective directories:
+# - infrastructure/config-service/wrangler.toml
+# - workers/image-gen/wrangler.toml
+# - workers/shared/rate-limiter/wrangler.toml
+
+# Common D1 Database binding (shared across workers)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "multiagent_system"
+# database_id = "your-database-id"
+
+# Common KV namespace binding (caching)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "your-kv-namespace-id"
+
+# Common R2 bucket binding (file storage)
+# [[r2_buckets]]
+# binding = "STORAGE"
+# bucket_name = "multiagent-storage"
+
+# Durable Objects (rate limiting)
+# [[durable_objects.bindings]]
+# name = "RATE_LIMITER"
+# class_name = "RateLimiter"
+# script_name = "rate-limiter"
