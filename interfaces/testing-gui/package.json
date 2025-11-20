@@ -1,0 +1,21 @@
+{
+  "name": "testing-gui",
+  "version": "1.0.0",
+  "description": "Testing GUI for Cloudflare Multi-Agent Image Generation System",
+  "scripts": {
+    "dev": "npx serve public -p 8080",
+    "build": "echo 'No build step needed for static site'",
+    "deploy": "wrangler pages deploy public --project-name=testing-gui"
+  },
+  "keywords": [
+    "cloudflare",
+    "pages",
+    "image-generation",
+    "testing"
+  ],
+  "author": "Team Leader 4 - Agent 4.1",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
