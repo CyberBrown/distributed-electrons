@@ -116,7 +116,7 @@ export class RateLimiter implements DurableObject {
   /**
    * Record a request in the rate limiter
    */
-  async recordRequest(tokens: number = 0): Promise<void> {
+  async recordRequest(tokens: number = 0): Promise<{success: boolean}> {
     const now = Date.now();
     const oneMinuteAgo = now - 60000;
 
@@ -131,6 +131,8 @@ export class RateLimiter implements DurableObject {
 
     // Persist to durable storage
     await this.state.storage.put('requests', this.requests);
+
+    return { success: true };
   }
 
   /**

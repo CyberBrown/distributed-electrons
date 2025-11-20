@@ -8,7 +8,7 @@ import type { RateLimitConfig } from '../../workers/shared/rate-limiter/types';
 
 // Mock DurableObjectState
 class MockDurableObjectState implements DurableObjectState {
-  private storage = new Map<string, any>();
+  private _storageMap = new Map<string, any>();
   id: DurableObjectId = {} as DurableObjectId;
 
   waitUntil(promise: Promise<any>): void {}
@@ -18,7 +18,7 @@ class MockDurableObjectState implements DurableObjectState {
   }
 
   get storage(): DurableObjectStorage {
-    const store = this.storage;
+    const store = this._storageMap;
     return {
       get: async (key: string) => store.get(key),
       put: async (key: string, value: any) => {
@@ -125,6 +125,10 @@ describe('RateLimiter', () => {
 
       const response = await limiter.fetch(request);
       const result = await response.json();
+
+      console.log('Response:', response);
+      console.log('Result:', result);
+      console.log('Result.success:', result.success);
 
       expect(result.success).toBe(true);
 

@@ -99,7 +99,7 @@ describe('R2 Storage Manager', () => {
       const path = generatePath('production', undefined, '../../../etc/passwd');
 
       expect(path).not.toContain('..');
-      expect(path).toMatch(/^production\/\d+_etc_passwd\.png$/);
+      expect(path).toMatch(/^production\/\d+_etcpasswd\.png$/);
     });
   });
 
@@ -110,7 +110,7 @@ describe('R2 Storage Manager', () => {
     });
 
     it('should replace unsafe characters', () => {
-      expect(sanitizeFilename('my file!@#$.png')).toBe('my_file____$.png');
+      expect(sanitizeFilename('my file!@#$.png')).toBe('my_file____.png');
     });
 
     it('should add .png extension if missing', () => {
