@@ -1,0 +1,11 @@
+# Cloudflare Pages Configuration for Admin Panel
+
+name = "admin-panel"
+compatibility_date = "2024-11-20"
+pages_build_output_dir = "dist"
+
+[env.production]
+name = "admin-panel-production"
+
+[env.development]
+name = "admin-panel-dev"
