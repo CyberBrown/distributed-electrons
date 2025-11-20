@@ -1,0 +1,123 @@
+/* Custom Styles for Testing GUI */
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+        sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Loading animation */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Copy button feedback */
+.copied {
+    background-color: #10b981 !important;
+    color: white;
+}
+
+/* Image zoom on hover */
+#generatedImage {
+    transition: transform 0.3s ease;
+    cursor: pointer;
+}
+
+#generatedImage:hover {
+    transform: scale(1.02);
+}
+
+/* Custom scrollbar for textarea */
+textarea::-webkit-scrollbar {
+    width: 8px;
+}
+
+textarea::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+textarea::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+textarea::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Status message animations */
+.status-success {
+    background-color: #d1fae5;
+    border-left: 4px solid #10b981;
+    color: #065f46;
+}
+
+.status-error {
+    background-color: #fee2e2;
+    border-left: 4px solid #ef4444;
+    color: #991b1b;
+}
+
+.status-info {
+    background-color: #dbeafe;
+    border-left: 4px solid #3b82f6;
+    color: #1e40af;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Button pulse on loading */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.btn-loading {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    pointer-events: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    h1 {
+        font-size: 2rem;
+    }
+
+    .grid-cols-1 {
+        grid-template-columns: 1fr;
+    }
+}
