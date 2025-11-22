@@ -34,6 +34,15 @@ import {
   deleteProject,
 } from './handlers/project-handlers';
 
+// Model Config handlers
+import {
+  getModelConfig,
+  listModelConfigs,
+  createModelConfig,
+  updateModelConfig,
+  deleteModelConfig,
+} from './handlers/model-config-handlers';
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -152,6 +161,35 @@ export default {
             return addCorsHeaders(response, corsHeaders);
           } else if (method === 'DELETE') {
             const response = await deleteProject(projectId, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        }
+      }
+
+      // Model Config routes
+      if (pathParts[0] === 'model-config') {
+        if (pathParts.length === 1) {
+          // GET /model-config or POST /model-config
+          if (method === 'GET') {
+            const providerId = url.searchParams.get('provider_id');
+            const status = url.searchParams.get('status');
+            const response = await listModelConfigs(providerId, status, env);
+            return addCorsHeaders(response, corsHeaders);
+          } else if (method === 'POST') {
+            const response = await createModelConfig(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 2) {
+          const id = pathParts[1];
+          // GET /model-config/{id}, PUT /model-config/{id}, DELETE /model-config/{id}
+          if (method === 'GET') {
+            const response = await getModelConfig(id, env);
+            return addCorsHeaders(response, corsHeaders);
+          } else if (method === 'PUT') {
+            const response = await updateModelConfig(id, request, env);
+            return addCorsHeaders(response, corsHeaders);
+          } else if (method === 'DELETE') {
+            const response = await deleteModelConfig(id, env);
             return addCorsHeaders(response, corsHeaders);
           }
         }

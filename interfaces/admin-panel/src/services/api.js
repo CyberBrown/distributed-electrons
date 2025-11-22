@@ -105,6 +105,75 @@ const mockLogs = Array.from({ length: 50 }, (_, i) => ({
   }
 }))
 
+const mockModelConfigs = [
+  {
+    config_id: 'cfg_ideogram_v2',
+    model_id: 'ideogram-v2',
+    provider_id: 'ideogram',
+    display_name: 'Ideogram V2',
+    description: 'High-quality image generation with excellent text rendering',
+    capabilities: { image: true, video: false, text: false },
+    pricing: { cost_per_image: 0.08, currency: 'USD' },
+    rate_limits: { rpm: 100, tpm: 50000 },
+    payload_mapping: {
+      endpoint: '/generate',
+      method: 'POST',
+      headers: { 'Api-Key': '{api_key}', 'Content-Type': 'application/json' },
+      body: { image_request: { model: 'V_2', prompt: '{user_prompt}', aspect_ratio: '{aspect_ratio}' } },
+      response_mapping: { job_id: '$.data.id', image_url: '$.data.url' },
+      defaults: { aspect_ratio: '1:1' }
+    },
+    status: 'active',
+    created_at: '2025-01-15T10:00:00Z',
+    updated_at: '2025-01-15T10:00:00Z'
+  },
+  {
+    config_id: 'cfg_gemini_veo_31',
+    model_id: 'gemini-veo-3.1',
+    provider_id: 'gemini',
+    display_name: 'Gemini Veo 3.1',
+    description: 'Advanced video generation model from Google',
+    capabilities: { image: false, video: true, text: false },
+    pricing: { cost_per_video: 0.50, currency: 'USD' },
+    rate_limits: { rpm: 60, tpm: 30000 },
+    payload_mapping: {
+      endpoint: '/v1/models/gemini-veo-3.1:generateContent',
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer {api_key}', 'Content-Type': 'application/json' },
+      body: {
+        contents: [{ parts: [{ text: '{user_prompt}' }] }],
+        generationConfig: { aspectRatio: '{aspect_ratio}', responseModality: 'video' }
+      },
+      response_mapping: { job_id: '$.name', video_url: '$.candidates[0].content.parts[0].videoUrl' },
+      defaults: { aspect_ratio: '16:9' }
+    },
+    status: 'active',
+    created_at: '2025-01-16T10:00:00Z',
+    updated_at: '2025-01-16T10:00:00Z'
+  },
+  {
+    config_id: 'cfg_dalle3',
+    model_id: 'dall-e-3',
+    provider_id: 'openai',
+    display_name: 'DALL-E 3',
+    description: 'OpenAI premier text-to-image generation model',
+    capabilities: { image: true, video: false, text: false },
+    pricing: { cost_per_image: 0.04, currency: 'USD' },
+    rate_limits: { rpm: 50, tpm: 25000 },
+    payload_mapping: {
+      endpoint: '/v1/images/generations',
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer {api_key}', 'Content-Type': 'application/json' },
+      body: { model: 'dall-e-3', prompt: '{user_prompt}', size: '{size}', quality: '{quality}' },
+      response_mapping: { image_url: '$.data[0].url', revised_prompt: '$.data[0].revised_prompt' },
+      defaults: { size: '1024x1024', quality: 'standard' }
+    },
+    status: 'active',
+    created_at: '2025-01-17T10:00:00Z',
+    updated_at: '2025-01-17T10:00:00Z'
+  }
+]
+
 // Helper to simulate API delay
 const delay = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -460,6 +529,125 @@ class ApiService {
       success: true,
       message: `${providerId} API key format is valid`
     }
+  }
+
+  // Model Configurations
+  async getModelConfigs(providerId = null, status = null) {
+    if (USE_MOCK) {
+      await delay()
+      let filtered = [...mockModelConfigs]
+
+      if (providerId) {
+        filtered = filtered.filter(c => c.provider_id === providerId)
+      }
+
+      if (status) {
+        filtered = filtered.filter(c => c.status === status)
+      }
+
+      return { configs: filtered, total: filtered.length }
+    }
+
+    const params = new URLSearchParams()
+    if (providerId) params.append('provider_id', providerId)
+    if (status) params.append('status', status)
+
+    const response = await fetch(`${this.baseUrl}/model-config?${params.toString()}`, {
+      headers: this.getAuthHeader()
+    })
+
+    if (!response.ok) throw new Error('Failed to fetch model configs')
+    return await response.json()
+  }
+
+  async getModelConfig(configId) {
+    if (USE_MOCK) {
+      await delay()
+      const config = mockModelConfigs.find(c => c.config_id === configId || c.model_id === configId)
+      if (!config) throw new Error('Model config not found')
+      return config
+    }
+
+    const response = await fetch(`${this.baseUrl}/model-config/${configId}`, {
+      headers: this.getAuthHeader()
+    })
+
+    if (!response.ok) throw new Error('Failed to fetch model config')
+    return await response.json()
+  }
+
+  async createModelConfig(data) {
+    if (USE_MOCK) {
+      await delay()
+      const configId = `cfg_${data.provider_id}_${data.model_id.replace(/-/g, '_')}`
+      const newConfig = {
+        config_id: configId,
+        ...data,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      mockModelConfigs.push(newConfig)
+      return newConfig
+    }
+
+    const response = await fetch(`${this.baseUrl}/model-config`, {
+      method: 'POST',
+      headers: this.getAuthHeader(),
+      body: JSON.stringify(data)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to create model config')
+    }
+    return await response.json()
+  }
+
+  async updateModelConfig(configId, data) {
+    if (USE_MOCK) {
+      await delay()
+      const index = mockModelConfigs.findIndex(c => c.config_id === configId || c.model_id === configId)
+      if (index === -1) throw new Error('Model config not found')
+
+      mockModelConfigs[index] = {
+        ...mockModelConfigs[index],
+        ...data,
+        updated_at: new Date().toISOString()
+      }
+
+      return mockModelConfigs[index]
+    }
+
+    const response = await fetch(`${this.baseUrl}/model-config/${configId}`, {
+      method: 'PUT',
+      headers: this.getAuthHeader(),
+      body: JSON.stringify(data)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to update model config')
+    }
+    return await response.json()
+  }
+
+  async deleteModelConfig(configId) {
+    if (USE_MOCK) {
+      await delay()
+      const index = mockModelConfigs.findIndex(c => c.config_id === configId || c.model_id === configId)
+      if (index === -1) throw new Error('Model config not found')
+
+      mockModelConfigs.splice(index, 1)
+      return { success: true, message: 'Model config deleted successfully' }
+    }
+
+    const response = await fetch(`${this.baseUrl}/model-config/${configId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeader()
+    })
+
+    if (!response.ok) throw new Error('Failed to delete model config')
+    return await response.json()
   }
 }
 

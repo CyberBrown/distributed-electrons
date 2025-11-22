@@ -131,6 +131,32 @@ CREATE INDEX idx_usage_logs_provider ON usage_logs(provider);
 CREATE INDEX idx_usage_logs_request_id ON usage_logs(request_id);
 
 -- ============================================================================
+-- TABLE: model_configs
+-- Description: Configuration for AI model variants with payload mapping
+-- Enables flexible, admin-managed model configurations without code changes
+-- Each model variant (e.g., Gemini Veo 3.1, GPT-4) has its own configuration
+-- ============================================================================
+CREATE TABLE model_configs (
+    config_id TEXT PRIMARY KEY,
+    model_id TEXT NOT NULL UNIQUE,
+    provider_id TEXT NOT NULL, -- e.g., 'gemini', 'openai', 'ideogram', 'anthropic'
+    display_name TEXT NOT NULL,
+    description TEXT,
+    capabilities JSON NOT NULL, -- { "image": true, "video": true, "text": false, ... }
+    pricing JSON, -- { "cost_per_image": 0.08, "currency": "USD", ... }
+    rate_limits JSON, -- { "rpm": 100, "tpm": 50000, ... }
+    payload_mapping JSON NOT NULL, -- Template for transforming inputs to provider format
+    status TEXT NOT NULL CHECK(status IN ('active', 'beta', 'deprecated')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX idx_model_configs_model_id ON model_configs(model_id);
+CREATE INDEX idx_model_configs_provider_id ON model_configs(provider_id);
+CREATE INDEX idx_model_configs_status ON model_configs(status);
+CREATE INDEX idx_model_configs_created_at ON model_configs(created_at DESC);
+
+-- ============================================================================
 -- ENCRYPTION NOTES
 -- ============================================================================
 -- Cloudflare D1 provides encryption at rest by default
