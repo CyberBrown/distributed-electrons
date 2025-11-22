@@ -168,3 +168,10 @@ export class RateLimiter implements DurableObject {
     };
   }
 }
+
+// Export as module worker
+export default {
+  async fetch(request: Request, env: any): Promise<Response> {
+    return new Response('Rate Limiter Worker - Use Durable Object bindings', { status: 200 });
+  },
+};

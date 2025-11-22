@@ -1,21 +1,15 @@
-# Rate Limiter Durable Object Configuration
-# This configuration should be included in worker wrangler.toml files
+name = "rate-limiter"
+main = "limiter.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 
-# Example usage in your worker's wrangler.toml:
-# [[durable_objects.bindings]]
-# name = "RATE_LIMITER"
-# class_name = "RateLimiter"
-# script_name = "rate-limiter"
+# Durable Object binding
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RateLimiter"
+script_name = "rate-limiter"
 
-# For the rate-limiter worker itself:
-# name = "rate-limiter"
-# main = "workers/shared/rate-limiter/limiter.ts"
-# compatibility_date = "2024-01-01"
-#
-# [[durable_objects.bindings]]
-# name = "RATE_LIMITER"
-# class_name = "RateLimiter"
-#
-# [[migrations]]
-# tag = "v1"
-# new_classes = ["RateLimiter"]
+# Durable Object migrations (using new_sqlite_classes for free plan compatibility)
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RateLimiter"]

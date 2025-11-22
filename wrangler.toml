@@ -3,7 +3,7 @@
 
 name = "cloudflare-multiagent-system"
 compatibility_date = "2024-11-20"
-node_compat = true
+compatibility_flags = ["nodejs_compat"]
 
 # Workers will be defined in their respective directories:
 # - infrastructure/config-service/wrangler.toml

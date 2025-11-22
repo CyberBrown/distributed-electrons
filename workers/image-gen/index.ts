@@ -26,32 +26,87 @@ export default {
     try {
       const url = new URL(request.url);
 
+      // Handle CORS preflight
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization',
+            'Access-Control-Max-Age': '86400',
+          },
+        });
+      }
+
       // Route handling
       if (url.pathname === '/generate' && request.method === 'POST') {
-        return await handleGenerate(request, env, requestId);
+        const response = await handleGenerate(request, env, requestId);
+        return addCorsHeaders(response);
       }
 
       if (url.pathname === '/health' && request.method === 'GET') {
-        return Response.json({ status: 'healthy', service: 'image-gen' });
+        return addCorsHeaders(Response.json({
+          status: 'healthy',
+          service: 'image-gen',
+          r2_configured: !!env.R2_BUCKET,
+        }));
       }
 
-      return createErrorResponse(
+      // Test R2 upload
+      if (url.pathname === '/test-r2' && request.method === 'GET') {
+        try {
+          if (!env.R2_BUCKET) {
+            return Response.json({ error: 'R2_BUCKET not configured' }, { status: 500 });
+          }
+          const testData = new TextEncoder().encode('test');
+          await env.R2_BUCKET.put('test/test.txt', testData);
+          const retrieved = await env.R2_BUCKET.get('test/test.txt');
+          return Response.json({
+            success: true,
+            uploaded: !!retrieved,
+            url: `${request.url.split('/test-r2')[0]}/images/test/test.txt`
+          });
+        } catch (error) {
+          return Response.json({
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }, { status: 500 });
+        }
+      }
+
+      // Serve images from R2
+      if (url.pathname.startsWith('/images/') && request.method === 'GET') {
+        const response = await handleImageServe(url.pathname.replace('/images/', ''), env);
+        return addCorsHeaders(response);
+      }
+
+      return addCorsHeaders(createErrorResponse(
         'Not Found',
         'ROUTE_NOT_FOUND',
         requestId,
         404
-      );
+      ));
     } catch (error) {
       console.error('Unhandled error:', error);
-      return createErrorResponse(
+      return addCorsHeaders(createErrorResponse(
         error instanceof Error ? error.message : 'Internal Server Error',
         'INTERNAL_ERROR',
         requestId,
         500
-      );
+      ));
     }
   },
 };
+
+/**
+ * Add CORS headers to response
+ */
+function addCorsHeaders(response: Response): Response {
+  const newResponse = new Response(response.body, response);
+  newResponse.headers.set('Access-Control-Allow-Origin', '*');
+  newResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  newResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, Authorization');
+  return newResponse;
+}
 
 /**
  * Handle image generation request
@@ -152,7 +207,7 @@ async function handleGenerate(
       2000 // Poll every 2 seconds
     );
 
-    // Step 8: Download image data
+    // Step 8: Download image from provider
     const imageResponse = await fetch(imageResult.image_url);
     if (!imageResponse.ok) {
       throw new Error('Failed to download image from provider');
@@ -179,11 +234,11 @@ async function handleGenerate(
       },
       {
         R2_BUCKET: env.R2_BUCKET,
-        CDN_URL: env.CDN_URL,
+        CDN_URL: request.url.match(/^https?:\/\/[^\/]+/)?.[0] || '', // Use worker URL as CDN
       }
     );
 
-    // Step 10: Return success response
+    // Step 10: Return success response with R2 URL
     const generationTime = Date.now() - startTime;
 
     const response: GenerateResponse = {
@@ -265,6 +320,30 @@ async function getInstanceConfig(
     },
     r2_bucket: 'production-images',
   };
+}
+
+/**
+ * Serve image from R2
+ */
+async function handleImageServe(path: string, env: Env): Promise<Response> {
+  if (!env.R2_BUCKET) {
+    return new Response('R2 bucket not configured', { status: 500 });
+  }
+
+  const object = await env.R2_BUCKET.get(path);
+
+  if (!object) {
+    return new Response('Image not found', { status: 404 });
+  }
+
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('etag', object.httpEtag);
+  headers.set('cache-control', 'public, max-age=31536000, immutable');
+
+  return new Response(object.body, {
+    headers,
+  });
 }
 
 /**

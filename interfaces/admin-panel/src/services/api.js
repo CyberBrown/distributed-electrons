@@ -95,7 +95,7 @@ const delay = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms))
 // API Service
 class ApiService {
   constructor() {
-    this.baseUrl = 'https://config-service.workers.dev'
+    this.baseUrl = 'https://config-service.solamp.workers.dev'
   }
 
   getAuthHeader() {

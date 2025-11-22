@@ -140,15 +140,13 @@ export function prepareMetadata(
  * Generate CDN URL for the uploaded image
  */
 export function generateCdnUrl(path: string, env: R2ManagerEnv): string {
-  // Use custom CDN URL if configured
+  // Use custom CDN URL if configured (worker URL)
   if (env.CDN_URL) {
-    return `${env.CDN_URL}/${path}`;
+    return `${env.CDN_URL}/images/${path}`;
   }
 
-  // Fallback to R2 public URL
-  // Note: In production, you should configure a custom domain
-  const bucket = env.R2_BUCKET?.name || 'default';
-  return `https://pub-${bucket}.r2.dev/${path}`;
+  // Fallback - should not reach here in production
+  return `https://storage.example.com/${path}`;
 }
 
 /**

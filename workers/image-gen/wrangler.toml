@@ -1,8 +1,9 @@
 # Image Generation Worker Configuration
 
 name = "image-gen"
-main = "workers/image-gen/index.ts"
+main = "index.ts"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 
 # Worker settings
 workers_dev = true

@@ -1,18 +1,16 @@
 name = "config-service"
 main = "index.ts"
 compatibility_date = "2024-01-01"
-node_compat = true
+compatibility_flags = ["nodejs_compat"]
 
 # Worker configuration
 workers_dev = true
-route = ""
-zone_id = ""
 
 # D1 Database binding
 [[d1_databases]]
 binding = "DB"
-database_name = "multi_tenant_db"
-database_id = ""  # To be filled in during deployment
+database_name = "multiagent_system"
+database_id = "7cff30a0-c974-4ede-b96a-c91dd2f0c870"
 
 # Environment variables
 [env.production]
@@ -39,12 +37,9 @@ binding = "DB"
 database_name = "multi_tenant_db_dev"
 database_id = ""  # Development database ID
 
-# Build configuration
-[build]
-command = "npm run build"
-
-[build.upload]
-format = "service-worker"
+# Build configuration - Wrangler handles TypeScript compilation automatically
+# [build]
+# command = "npm run build"
 
 # Routes configuration
 # These will be configured based on your domain
