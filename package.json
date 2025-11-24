@@ -1,7 +1,7 @@
 {
-  "name": "cloudflare-multiagent-system",
+  "name": "distributed-electrons",
   "version": "1.0.0",
-  "description": "Multi-agent Cloudflare Workers system with hierarchical instance management",
+  "description": "Distributed Electrons - Multi-agent AI platform built on Cloudflare Workers",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -29,7 +29,7 @@
     "ai",
     "image-generation"
   ],
-  "author": "Cloudflare Multi-Agent Team",
+  "author": "Distributed Electrons Team",
   "license": "MIT",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",

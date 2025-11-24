@@ -43,5 +43,5 @@ database_id = ""  # Development database ID
 
 # Routes configuration
 routes = [
-  { pattern = "api.distributedelectrons.com/*", zone_name = "distributedelectrons.com" }
+  { pattern = "api.distributedelectrons.com/*", zone_id = "417d6062ae2113dc20c4910e9f6f691f" }
 ]

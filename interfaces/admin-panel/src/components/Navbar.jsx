@@ -16,7 +16,7 @@ export default function Navbar({ onLogout }) {
           {/* Logo */}
           <div className="flex-shrink-0">
             <Link to="/" className="text-white text-xl font-bold">
-              Cloudflare Multi-Agent Admin
+              Distributed Electrons Admin
             </Link>
           </div>
 
@@ -46,6 +46,12 @@ export default function Navbar({ onLogout }) {
                 className={`px-3 py-2 rounded-md text-sm font-medium transition ${isActive('/models')}`}
               >
                 Models
+              </Link>
+              <Link
+                to="/deployments"
+                className={`px-3 py-2 rounded-md text-sm font-medium transition ${isActive('/deployments')}`}
+              >
+                Deployments
               </Link>
               <Link
                 to="/logs"

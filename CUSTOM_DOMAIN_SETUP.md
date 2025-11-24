@@ -1,7 +1,7 @@
 # Custom Domain Configuration Guide
 ## Domain: distributedelectrons.com
 
-This guide will help you configure custom domains for all services in the Cloudflare Multi-Agent System.
+This guide will help you configure custom domains for all services in Distributed Electrons.
 
 ## Prerequisites
 
