@@ -6,7 +6,7 @@
 
 ## Overview
 
-Migration of 120-agent Content Forge system to Cloudflare Workers infrastructure, creating a generic, flexible, and portable multi-agent platform that can be consumed by any authenticated application.
+Migration of 120-agent JS workflow to Cloudflare Workers infrastructure, creating a generic, flexible, and portable multi-agent platform that can be consumed by any authenticated application.
 
 ### Key Features
 
