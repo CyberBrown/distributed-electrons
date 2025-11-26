@@ -169,7 +169,7 @@ export async function getInstanceConfig(
   instanceId: string,
   env: Env
 ): Promise<InstanceConfig | null> {
-  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.your-domain.com';
 
   try {
     const response = await fetch(`${configServiceUrl}/instance/${instanceId}`, {
@@ -201,7 +201,7 @@ export async function getModelConfig(
   modelId: string,
   env: Env
 ): Promise<ModelConfig | null> {
-  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.your-domain.com';
 
   try {
     const response = await fetch(`${configServiceUrl}/model-config/${modelId}`, {
@@ -234,7 +234,7 @@ export async function listModels(
   env: Env,
   filters?: { provider_id?: string; status?: string }
 ): Promise<ModelConfig[]> {
-  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.your-domain.com';
 
   try {
     const params = new URLSearchParams();

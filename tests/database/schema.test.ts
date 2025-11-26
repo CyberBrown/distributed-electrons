@@ -222,8 +222,8 @@ describe('Database Schema Tests', () => {
       // );
       //
       // expect(org).not.toBeNull();
-      // expect(org?.name).toBe('Solamp Inc.');
-      // expect(org?.billing_email).toBe('billing@solamp.com');
+      // expect(org?.name).toBe('Acme Corp.');
+      // expect(org?.billing_email).toBe('billing@example.com');
 
       expect(true).toBe(true); // Placeholder
     });
@@ -236,7 +236,7 @@ describe('Database Schema Tests', () => {
       //
       // expect(prodInstance).not.toBeNull();
       // expect(prodInstance?.name).toBe('production');
-      // expect(prodInstance?.config.r2_bucket).toBe('solamp-prod-assets');
+      // expect(prodInstance?.config.r2_bucket).toBe('your-prod-assets');
       // expect(prodInstance?.config.rate_limits.openai.rpm).toBe(500);
 
       expect(true).toBe(true); // Placeholder
@@ -244,7 +244,7 @@ describe('Database Schema Tests', () => {
 
     test('should insert user seed data', async () => {
       // Verify that seed users exist
-      // const admin = await queries.getUserByEmail('admin@solamp.com');
+      // const admin = await queries.getUserByEmail('admin@example.com');
       //
       // expect(admin).not.toBeNull();
       // expect(admin?.role).toBe('admin');

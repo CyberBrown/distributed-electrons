@@ -229,7 +229,7 @@ async function handleGenerate(
  * Handle models list request
  */
 async function handleListModels(env: Env, requestId: string): Promise<Response> {
-  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.your-domain.com';
 
   try {
     const response = await fetch(`${configServiceUrl}/model-config?status=active`, {

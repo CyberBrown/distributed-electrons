@@ -5,7 +5,7 @@ API reference for managing AI model configurations programmatically.
 ## Base URL
 
 ```
-https://config-service.distributedelectrons.com
+https://config-service.your-domain.com
 ```
 
 ## Authentication
@@ -33,16 +33,16 @@ GET /model-config
 
 ```bash
 # Get all model configs
-curl https://config-service.distributedelectrons.com/model-config
+curl https://config-service.your-domain.com/model-config
 
 # Get only OpenAI models
-curl https://config-service.distributedelectrons.com/model-config?provider_id=openai
+curl https://config-service.your-domain.com/model-config?provider_id=openai
 
 # Get only active models
-curl https://config-service.distributedelectrons.com/model-config?status=active
+curl https://config-service.your-domain.com/model-config?status=active
 
 # Get active OpenAI models
-curl https://config-service.distributedelectrons.com/model-config?provider_id=openai&status=active
+curl https://config-service.your-domain.com/model-config?provider_id=openai&status=active
 ```
 
 **Success Response:**
@@ -134,10 +134,10 @@ GET /model-config/{id}
 
 ```bash
 # By config ID
-curl https://config-service.distributedelectrons.com/model-config/cfg_ideogram_v2
+curl https://config-service.your-domain.com/model-config/cfg_ideogram_v2
 
 # By model ID
-curl https://config-service.distributedelectrons.com/model-config/ideogram-v2
+curl https://config-service.your-domain.com/model-config/ideogram-v2
 ```
 
 **Success Response:**
@@ -277,7 +277,7 @@ Content-Type: application/json
 **Example Request:**
 
 ```bash
-curl -X POST https://config-service.distributedelectrons.com/model-config \
+curl -X POST https://config-service.your-domain.com/model-config \
   -H "Content-Type: application/json" \
   -d '{
     "model_id": "gemini-imagen-3",
@@ -369,7 +369,7 @@ Only include fields you want to update:
 **Example Request:**
 
 ```bash
-curl -X PUT https://config-service.distributedelectrons.com/model-config/cfg_abc123 \
+curl -X PUT https://config-service.your-domain.com/model-config/cfg_abc123 \
   -H "Content-Type: application/json" \
   -d '{
     "display_name": "Gemini Imagen 3 (Updated)",
@@ -428,7 +428,7 @@ DELETE /model-config/{id}
 **Example Request:**
 
 ```bash
-curl -X DELETE https://config-service.distributedelectrons.com/model-config/cfg_abc123
+curl -X DELETE https://config-service.your-domain.com/model-config/cfg_abc123
 ```
 
 **Success Response:**
@@ -666,14 +666,14 @@ Access-Control-Allow-Headers: Content-Type, Authorization
 ```typescript
 // List all active models
 const response = await fetch(
-  'https://config-service.distributedelectrons.com/model-config?status=active'
+  'https://config-service.your-domain.com/model-config?status=active'
 );
 const { data } = await response.json();
 console.log(`Found ${data.total} active models`);
 
 // Get specific model
 const modelResponse = await fetch(
-  'https://config-service.distributedelectrons.com/model-config/ideogram-v2'
+  'https://config-service.your-domain.com/model-config/ideogram-v2'
 );
 const { data: model } = await modelResponse.json();
 console.log(`Model: ${model.display_name}`);
@@ -689,7 +689,7 @@ const newModel = {
 };
 
 const createResponse = await fetch(
-  'https://config-service.distributedelectrons.com/model-config',
+  'https://config-service.your-domain.com/model-config',
   {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -707,14 +707,14 @@ import requests
 
 # List all models
 response = requests.get(
-    'https://config-service.distributedelectrons.com/model-config'
+    'https://config-service.your-domain.com/model-config'
 )
 data = response.json()
 print(f"Found {data['data']['total']} models")
 
 # Get specific model
 model_response = requests.get(
-    'https://config-service.distributedelectrons.com/model-config/ideogram-v2'
+    'https://config-service.your-domain.com/model-config/ideogram-v2'
 )
 model = model_response.json()['data']
 print(f"Model: {model['display_name']}")
@@ -730,7 +730,7 @@ new_model = {
 }
 
 create_response = requests.post(
-    'https://config-service.distributedelectrons.com/model-config',
+    'https://config-service.your-domain.com/model-config',
     json=new_model
 )
 created = create_response.json()['data']
@@ -741,23 +741,23 @@ print(f"Created: {created['config_id']}")
 
 ```bash
 # List all models
-curl https://config-service.distributedelectrons.com/model-config
+curl https://config-service.your-domain.com/model-config
 
 # Get specific model
-curl https://config-service.distributedelectrons.com/model-config/ideogram-v2
+curl https://config-service.your-domain.com/model-config/ideogram-v2
 
 # Create model
-curl -X POST https://config-service.distributedelectrons.com/model-config \
+curl -X POST https://config-service.your-domain.com/model-config \
   -H "Content-Type: application/json" \
   -d @new-model.json
 
 # Update model
-curl -X PUT https://config-service.distributedelectrons.com/model-config/cfg_abc123 \
+curl -X PUT https://config-service.your-domain.com/model-config/cfg_abc123 \
   -H "Content-Type: application/json" \
   -d '{"status": "active"}'
 
 # Delete model
-curl -X DELETE https://config-service.distributedelectrons.com/model-config/cfg_abc123
+curl -X DELETE https://config-service.your-domain.com/model-config/cfg_abc123
 ```
 
 ---

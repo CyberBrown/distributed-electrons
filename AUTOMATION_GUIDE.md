@@ -45,7 +45,7 @@ The `add-service.sh` script automates:
 
 # 2. Update your wrangler.toml
 # routes = [
-#   { pattern = "analytics.distributedelectrons.com/*", zone_name = "distributedelectrons.com" }
+#   { pattern = "analytics.your-domain.com/*", zone_name = "your-domain.com" }
 # ]
 
 # 3. Deploy
@@ -99,11 +99,11 @@ export CLOUDFLARE_API_TOKEN='your-token-here'
 
 | Subdomain | Type | Project | URL |
 |-----------|------|---------|-----|
-| monitoring | Pages | monitoring-dashboard | https://monitoring.distributedelectrons.com |
-| admin | Pages | admin-panel | https://admin.distributedelectrons.com |
-| testing | Pages | testing-gui | https://testing.distributedelectrons.com |
-| api | Worker | config-service | https://api.distributedelectrons.com |
-| images | Worker | image-gen | https://images.distributedelectrons.com |
+| monitoring | Pages | monitoring-dashboard | https://monitoring.your-domain.com |
+| admin | Pages | admin-panel | https://admin.your-domain.com |
+| testing | Pages | testing-gui | https://testing.your-domain.com |
+| api | Worker | config-service | https://api.your-domain.com |
+| images | Worker | image-gen | https://images.your-domain.com |
 
 ## API Token Permissions
 
@@ -126,7 +126,7 @@ Account Permissions:
 ### DNS Not Resolving
 ```bash
 # Check if DNS record was created
-dig subdomain.distributedelectrons.com
+dig subdomain.your-domain.com
 
 # Typical propagation time: 1-5 minutes
 ```

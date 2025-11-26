@@ -8,7 +8,7 @@ The Cloudflare Multi-Agent System supports multiple AI providers and models for 
 
 ## Accessing the Testing GUI
 
-1. Open the Testing GUI: `https://testing.distributedelectrons.com`
+1. Open the Testing GUI: `https://testing.your-domain.com`
 2. Enter your API key
 3. Enter your Instance ID
 4. Select a model from the dropdown

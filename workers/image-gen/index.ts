@@ -334,7 +334,7 @@ async function handleGenerate(
  * Fetch model configuration from config service
  */
 async function getModelConfig(modelId: string, env: Env): Promise<any> {
-  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://config-service.distributedelectrons.com';
+  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://config-service.your-domain.com';
 
   try {
     const response = await fetch(`${configServiceUrl}/model-config/${modelId}`, {
@@ -376,7 +376,7 @@ async function getInstanceConfig(
   // In production, this would query Team 1's Config Service
   return {
     instance_id: instanceId,
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     api_keys: {
       // These would come from D1 database in production
       ideogram: env.IDEOGRAM_API_KEY || 'ide_mock_key',

@@ -40,5 +40,5 @@ CDN_URL = "https://cdn.example.com"
 
 # Custom routes
 routes = [
-  { pattern = "images.distributedelectrons.com/*", zone_name = "distributedelectrons.com" }
+  { pattern = "images.your-domain.com/*", zone_name = "your-domain.com" }
 ]

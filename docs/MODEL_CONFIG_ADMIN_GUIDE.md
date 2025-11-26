@@ -12,7 +12,7 @@ The Model Configuration system allows administrators to:
 
 ## Accessing the Models Page
 
-1. Open the Admin Panel: `https://admin.distributedelectrons.com`
+1. Open the Admin Panel: `https://admin.your-domain.com`
 2. Log in with your API key
 3. Click **Models** in the navigation bar
 
@@ -431,19 +431,19 @@ For programmatic access to model configs:
 
 ```bash
 # List all models
-GET https://config-service.distributedelectrons.com/model-config
+GET https://config-service.your-domain.com/model-config
 
 # Get specific model
-GET https://config-service.distributedelectrons.com/model-config/ideogram-v2
+GET https://config-service.your-domain.com/model-config/ideogram-v2
 
 # Filter by provider
-GET https://config-service.distributedelectrons.com/model-config?provider_id=openai
+GET https://config-service.your-domain.com/model-config?provider_id=openai
 
 # Filter by status
-GET https://config-service.distributedelectrons.com/model-config?status=active
+GET https://config-service.your-domain.com/model-config?status=active
 
 # Create model
-POST https://config-service.distributedelectrons.com/model-config
+POST https://config-service.your-domain.com/model-config
 Content-Type: application/json
 
 {
@@ -453,7 +453,7 @@ Content-Type: application/json
 }
 
 # Update model
-PUT https://config-service.distributedelectrons.com/model-config/cfg_abc123
+PUT https://config-service.your-domain.com/model-config/cfg_abc123
 Content-Type: application/json
 
 {
@@ -462,7 +462,7 @@ Content-Type: application/json
 }
 
 # Delete model
-DELETE https://config-service.distributedelectrons.com/model-config/cfg_abc123
+DELETE https://config-service.your-domain.com/model-config/cfg_abc123
 ```
 
 ## See Also

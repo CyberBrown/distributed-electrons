@@ -6,7 +6,7 @@ const USE_MOCK = false // Toggle for parallel development
 const mockInstances = [
   {
     instance_id: 'production',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     name: 'Production Instance',
     status: 'active',
     api_keys: {
@@ -28,7 +28,7 @@ const mockInstances = [
   },
   {
     instance_id: 'development',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     name: 'Development Instance',
     status: 'active',
     api_keys: {
@@ -51,7 +51,7 @@ const mockUsers = [
     user_id: 'user_123',
     email: 'admin@example.com',
     role: 'admin',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     instances: ['production', 'development'],
     created_at: '2025-01-01T00:00:00Z'
   },
@@ -59,7 +59,7 @@ const mockUsers = [
     user_id: 'user_456',
     email: 'developer@example.com',
     role: 'user',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     instances: ['production'],
     created_at: '2025-01-05T00:00:00Z'
   }
@@ -180,7 +180,7 @@ const delay = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms))
 // API Service
 class ApiService {
   constructor() {
-    this.baseUrl = 'https://config-service.solamp.workers.dev'
+    this.baseUrl = 'https://config-service.your-subdomain.workers.dev'
   }
 
   getAuthHeader() {

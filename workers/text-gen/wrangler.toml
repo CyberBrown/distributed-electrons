@@ -21,7 +21,7 @@ database_id = "7cff30a0-c974-4ede-b96a-c91dd2f0c870"
 
 # Environment Variables
 [vars]
-CONFIG_SERVICE_URL = "https://config-service.solamp.workers.dev"
+CONFIG_SERVICE_URL = "https://config-service.your-subdomain.workers.dev"
 DEFAULT_PROVIDER = "openai"
 DEFAULT_MODEL_ID = "gpt-4o-mini"
 
@@ -30,5 +30,5 @@ DEFAULT_MODEL_ID = "gpt-4o-mini"
 
 # Custom routes
 routes = [
-  { pattern = "text-testing.distributedelectrons.com/*", zone_name = "distributedelectrons.com" }
+  { pattern = "text-testing.your-domain.com/*", zone_name = "your-domain.com" }
 ]

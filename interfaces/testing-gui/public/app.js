@@ -53,7 +53,7 @@ function init() {
 
 // Load available models from config service
 async function loadAvailableModels() {
-    const configServiceUrl = 'https://config-service.solamp.workers.dev';
+    const configServiceUrl = 'https://config-service.your-subdomain.workers.dev';
     modelConfigs.loading = true;
 
     try {
@@ -342,7 +342,7 @@ async function generateImage(formData) {
 
 // Generate Image - Real API
 async function generateImageReal(formData) {
-    const baseUrl = `https://image-gen.solamp.workers.dev`;
+    const baseUrl = `https://image-gen.your-subdomain.workers.dev`;
 
     const response = await fetch(`${baseUrl}/generate`, {
         method: 'POST',

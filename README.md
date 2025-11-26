@@ -20,7 +20,7 @@ Migration of 120-agent Content Forge system to Cloudflare Workers infrastructure
 ## Architecture
 
 ```
-Organization (e.g., Solamp Inc.)
+Organization (e.g., Acme Corp.)
   └── Instance (like a VM - "production", "staging")
       ├── API Keys (shared across projects)
       ├── Rate Limits (shared pool)

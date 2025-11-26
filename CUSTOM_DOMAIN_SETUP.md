@@ -1,25 +1,25 @@
 # Custom Domain Configuration Guide
-## Domain: distributedelectrons.com
+## Domain: your-domain.com
 
 This guide will help you configure custom domains for all services in the Cloudflare Multi-Agent System.
 
 ## Prerequisites
 
-1. Domain `distributedelectrons.com` must be added to your Cloudflare account
+1. Domain `your-domain.com` must be added to your Cloudflare account
 2. Nameservers must be pointed to Cloudflare
 3. SSL/TLS mode should be set to "Full (strict)" in Cloudflare dashboard
 
 ## Domain Structure
 
 ### Pages Projects (Frontend Interfaces)
-- `monitoring.distributedelectrons.com` - Monitoring Dashboard
-- `admin.distributedelectrons.com` - Admin Panel
-- `testing.distributedelectrons.com` - Testing GUI
+- `monitoring.your-domain.com` - Monitoring Dashboard
+- `admin.your-domain.com` - Admin Panel
+- `testing.your-domain.com` - Testing GUI
 
 ### Workers (Backend APIs)
-- `api.distributedelectrons.com` - Config Service (Main API)
-- `images.distributedelectrons.com` - Image Generation Worker
-- `ratelimit.distributedelectrons.com` - Rate Limiter (if exposed)
+- `api.your-domain.com` - Config Service (Main API)
+- `images.your-domain.com` - Image Generation Worker
+- `ratelimit.your-domain.com` - Rate Limiter (if exposed)
 
 ---
 
@@ -78,7 +78,7 @@ npx wrangler pages deployment list --project-name=monitoring-dashboard
 
 # Add custom domain via Cloudflare dashboard or CLI
 # Dashboard: Pages → monitoring-dashboard → Custom domains → Set up a domain
-# Add: monitoring.distributedelectrons.com
+# Add: monitoring.your-domain.com
 ```
 
 ### Admin Panel
@@ -93,7 +93,7 @@ npx wrangler pages deploy dist --project-name=admin-panel --branch=master
 
 # Add custom domain via Cloudflare dashboard
 # Dashboard: Pages → admin-panel → Custom domains → Set up a domain
-# Add: admin.distributedelectrons.com
+# Add: admin.your-domain.com
 ```
 
 ### Testing GUI
@@ -107,7 +107,7 @@ npx wrangler pages deploy public --project-name=testing-gui --branch=master
 
 # Add custom domain via Cloudflare dashboard
 # Dashboard: Pages → testing-gui → Custom domains → Set up a domain
-# Add: testing.distributedelectrons.com
+# Add: testing.your-domain.com
 ```
 
 ---
@@ -123,7 +123,7 @@ cd infrastructure/config-service
 npx wrangler deploy
 ```
 
-This will deploy to `api.distributedelectrons.com`
+This will deploy to `api.your-domain.com`
 
 ### Image Generation Worker
 
@@ -132,7 +132,7 @@ cd workers/image-gen
 npx wrangler deploy
 ```
 
-This will deploy to `images.distributedelectrons.com`
+This will deploy to `images.your-domain.com`
 
 ### Rate Limiter
 
@@ -154,7 +154,7 @@ File: `interfaces/monitoring/src/services/api.js`
 
 ```javascript
 constructor() {
-  this.baseUrl = 'https://api.distributedelectrons.com'
+  this.baseUrl = 'https://api.your-domain.com'
 }
 ```
 
@@ -163,7 +163,7 @@ File: `interfaces/admin-panel/src/services/api.js`
 
 ```javascript
 constructor() {
-  this.baseUrl = 'https://api.distributedelectrons.com'
+  this.baseUrl = 'https://api.your-domain.com'
 }
 ```
 
@@ -172,7 +172,7 @@ File: `interfaces/testing-gui/public/app.js`
 
 Update the API endpoint to:
 ```javascript
-const API_URL = 'https://images.distributedelectrons.com'
+const API_URL = 'https://images.your-domain.com'
 ```
 
 ---
@@ -191,18 +191,18 @@ Check certificate status:
 
 ### Test Pages Projects:
 ```bash
-curl -I https://monitoring.distributedelectrons.com
-curl -I https://admin.distributedelectrons.com
-curl -I https://testing.distributedelectrons.com
+curl -I https://monitoring.your-domain.com
+curl -I https://admin.your-domain.com
+curl -I https://testing.your-domain.com
 ```
 
 ### Test Workers:
 ```bash
 # Config Service
-curl https://api.distributedelectrons.com/health
+curl https://api.your-domain.com/health
 
 # Image Generation
-curl https://images.distributedelectrons.com/health
+curl https://images.your-domain.com/health
 ```
 
 ---
@@ -221,9 +221,9 @@ echo "Adding custom domains..."
 # The wrangler CLI doesn't directly support adding custom domains yet
 
 echo "Please add the following custom domains via Cloudflare Dashboard:"
-echo "1. monitoring.distributedelectrons.com → monitoring-dashboard project"
-echo "2. admin.distributedelectrons.com → admin-panel project"
-echo "3. testing.distributedelectrons.com → testing-gui project"
+echo "1. monitoring.your-domain.com → monitoring-dashboard project"
+echo "2. admin.your-domain.com → admin-panel project"
+echo "3. testing.your-domain.com → testing-gui project"
 ```
 
 ---
@@ -233,7 +233,7 @@ echo "3. testing.distributedelectrons.com → testing-gui project"
 ### DNS Not Resolving
 - Verify DNS records are set to "Proxied" (orange cloud)
 - Wait 1-5 minutes for DNS propagation
-- Check: `dig monitoring.distributedelectrons.com`
+- Check: `dig monitoring.your-domain.com`
 
 ### SSL Certificate Issues
 - Ensure SSL/TLS mode is "Full (strict)"
@@ -256,11 +256,11 @@ echo "3. testing.distributedelectrons.com → testing-gui project"
 
 | Service | Custom Domain | Type | Configuration |
 |---------|--------------|------|---------------|
-| Monitoring Dashboard | monitoring.distributedelectrons.com | Pages | Cloudflare Dashboard |
-| Admin Panel | admin.distributedelectrons.com | Pages | Cloudflare Dashboard |
-| Testing GUI | testing.distributedelectrons.com | Pages | Cloudflare Dashboard |
-| Config Service | api.distributedelectrons.com | Worker | wrangler.toml routes |
-| Image Gen Worker | images.distributedelectrons.com | Worker | wrangler.toml routes |
+| Monitoring Dashboard | monitoring.your-domain.com | Pages | Cloudflare Dashboard |
+| Admin Panel | admin.your-domain.com | Pages | Cloudflare Dashboard |
+| Testing GUI | testing.your-domain.com | Pages | Cloudflare Dashboard |
+| Config Service | api.your-domain.com | Worker | wrangler.toml routes |
+| Image Gen Worker | images.your-domain.com | Worker | wrangler.toml routes |
 
 ---
 

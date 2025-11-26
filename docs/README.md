@@ -77,7 +77,7 @@ graph TB
 
 ```mermaid
 graph LR
-    Org[Organization<br/>Solamp Inc.]
+    Org[Organization<br/>Acme Corp.]
 
     subgraph Instances
         Prod[Production Instance]

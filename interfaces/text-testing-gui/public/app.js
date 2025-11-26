@@ -5,8 +5,8 @@
 
 // Configuration
 const CONFIG = {
-  textGenUrl: 'https://text-testing.distributedelectrons.com',
-  configServiceUrl: 'https://config-service.solamp.workers.dev',
+  textGenUrl: 'https://text-testing.your-domain.com',
+  configServiceUrl: 'https://config-service.your-subdomain.workers.dev',
 };
 
 // State

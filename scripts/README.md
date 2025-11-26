@@ -43,7 +43,7 @@ npm run deploy-instance -- --config instances/production.json
 ```json
 {
   "instance_id": "production",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "name": "Production Instance",
   "api_keys": {
     "ideogram": "ide_your_api_key"
