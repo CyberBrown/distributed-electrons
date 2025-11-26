@@ -2,6 +2,8 @@
 
 export interface Env {
   DB: D1Database;
+  PROVIDER_KEYS?: KVNamespace;
+  ENCRYPTION_KEY?: string;
   ENVIRONMENT?: string;
 }
 
@@ -87,6 +89,14 @@ export interface PayloadMapping {
   transformations?: Record<string, string>;
 }
 
+export interface PromptTemplate {
+  system_prompt?: string;
+  user_prompt_wrapper?: string;
+  default_temperature?: number;
+  default_max_tokens?: number;
+  stop_sequences?: string[];
+}
+
 export interface ModelConfig {
   config_id: string;
   model_id: string;
@@ -97,6 +107,7 @@ export interface ModelConfig {
   pricing?: Pricing;
   rate_limits?: RateLimits;
   payload_mapping: PayloadMapping;
+  prompt_template?: PromptTemplate;
   status: 'active' | 'beta' | 'deprecated';
   created_at: string;
   updated_at: string;
@@ -111,6 +122,7 @@ export interface CreateModelConfigRequest {
   pricing?: Pricing;
   rate_limits?: RateLimits;
   payload_mapping: PayloadMapping;
+  prompt_template?: PromptTemplate;
   status: 'active' | 'beta' | 'deprecated';
 }
 
@@ -121,7 +133,22 @@ export interface UpdateModelConfigRequest {
   pricing?: Pricing;
   rate_limits?: RateLimits;
   payload_mapping?: PayloadMapping;
+  prompt_template?: PromptTemplate;
   status?: 'active' | 'beta' | 'deprecated';
+}
+
+// Provider API Key management
+export interface ProviderKeyRequest {
+  instance_id: string;
+  provider: string;
+  api_key: string;
+}
+
+export interface ProviderKeyResponse {
+  instance_id: string;
+  provider: string;
+  configured: boolean;
+  updated_at: string;
 }
 
 export interface ErrorResponse {

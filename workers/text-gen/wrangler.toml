@@ -1,0 +1,34 @@
+# Text Generation Worker Configuration
+
+name = "text-gen"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Worker settings
+workers_dev = true
+
+# KV namespace for encrypted provider API keys
+[[kv_namespaces]]
+binding = "PROVIDER_KEYS"
+id = "60eab140779649c09cb9aea7b3c8f533"
+
+# D1 Database for auth lookups
+[[d1_databases]]
+binding = "DB"
+database_name = "multiagent_system"
+database_id = "7cff30a0-c974-4ede-b96a-c91dd2f0c870"
+
+# Environment Variables
+[vars]
+CONFIG_SERVICE_URL = "https://config-service.solamp.workers.dev"
+DEFAULT_PROVIDER = "openai"
+DEFAULT_MODEL_ID = "gpt-4o-mini"
+
+# Secrets (set with: wrangler secret put <NAME>)
+# - ENCRYPTION_KEY (for decrypting provider API keys from KV)
+
+# Custom routes
+routes = [
+  { pattern = "text-testing.distributedelectrons.com/*", zone_name = "distributedelectrons.com" }
+]

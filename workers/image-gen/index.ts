@@ -10,6 +10,7 @@ import {
   generateMetadata as createImageMetadata,
   serializeMetadata,
 } from '../shared/r2-manager';
+import { applyPayloadMapping, applyResponseMapping } from '../shared/utils/payload-mapper';
 import type {
   Env,
   GenerateRequest,
@@ -153,8 +154,22 @@ async function handleGenerate(
       );
     }
 
-    // Step 2: Determine provider (default to ideogram for MVP)
-    const provider = env.DEFAULT_PROVIDER || 'ideogram';
+    // Step 2: Determine model and fetch configuration
+    const modelId = body.model || getDefaultModelId(env);
+    const modelConfig = await getModelConfig(modelId, env);
+
+    // Fallback to legacy provider-based approach if model config not found
+    let provider: string;
+    let useModelConfig = false;
+
+    if (modelConfig) {
+      provider = modelConfig.provider_id;
+      useModelConfig = true;
+      console.log(`Using model config for ${modelId} (provider: ${provider})`);
+    } else {
+      provider = env.DEFAULT_PROVIDER || 'ideogram';
+      console.warn(`Model config not found for ${modelId}, falling back to legacy mode with provider: ${provider}`);
+    }
 
     // Step 3: Check rate limits
     const rateLimitConfig = instanceConfig.rate_limits[provider];
@@ -180,13 +195,7 @@ async function handleGenerate(
       }
     }
 
-    // Step 4: Get provider adapter
-    const adapter = providerRegistry.getAdapter(provider);
-
-    // Step 5: Format request for provider
-    const providerRequest = adapter.formatRequest(body.prompt, body.options || {});
-
-    // Step 6: Submit job to provider
+    // Step 4: Get API key for provider
     const apiKey = instanceConfig.api_keys[provider];
     if (!apiKey) {
       return createErrorResponse(
@@ -197,9 +206,36 @@ async function handleGenerate(
       );
     }
 
+    // Step 5: Get provider adapter
+    const adapter = providerRegistry.getAdapter(provider);
+
+    // Step 6: Format request for provider
+    let providerRequest: any;
+
+    if (useModelConfig && modelConfig) {
+      // Use model config payload mapping
+      console.log('Applying payload mapping from model config');
+      providerRequest = applyPayloadMapping(
+        modelConfig.payload_mapping,
+        {
+          user_prompt: body.prompt,
+          aspect_ratio: body.options?.aspect_ratio,
+          style: body.options?.style,
+          quality: body.options?.quality,
+          num_images: body.options?.num_images || 1,
+          ...body.options, // Include any additional options
+        },
+        apiKey
+      );
+    } else {
+      // Legacy: use adapter formatRequest
+      console.log('Using legacy adapter formatRequest');
+      providerRequest = adapter.formatRequest(body.prompt, body.options || {});
+    }
+
     const jobId = await adapter.submitJob(providerRequest, apiKey);
 
-    // Step 7: Poll until complete (with timeout)
+    // Step 8: Poll until complete (with timeout)
     const imageResult = await adapter.pollUntilComplete(
       jobId,
       apiKey,
@@ -295,6 +331,39 @@ async function handleGenerate(
 }
 
 /**
+ * Fetch model configuration from config service
+ */
+async function getModelConfig(modelId: string, env: Env): Promise<any> {
+  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://config-service.distributedelectrons.com';
+
+  try {
+    const response = await fetch(`${configServiceUrl}/model-config/${modelId}`, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to fetch model config for ${modelId}:`, response.statusText);
+      return null;
+    }
+
+    const result = await response.json();
+    return result.data || result;
+  } catch (error) {
+    console.error(`Error fetching model config for ${modelId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Get default model ID for the instance
+ */
+function getDefaultModelId(env: Env): string {
+  return env.DEFAULT_MODEL_ID || 'ideogram-v2';
+}
+
+/**
  * Get instance configuration
  * Note: This is a mock implementation. In production, this would call
  * Team 1's Config Service to get the real configuration from D1.
@@ -311,6 +380,8 @@ async function getInstanceConfig(
     api_keys: {
       // These would come from D1 database in production
       ideogram: env.IDEOGRAM_API_KEY || 'ide_mock_key',
+      gemini: env.GEMINI_API_KEY || '',
+      openai: env.OPENAI_API_KEY || '',
     },
     rate_limits: {
       ideogram: {

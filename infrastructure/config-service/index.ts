@@ -43,6 +43,14 @@ import {
   deleteModelConfig,
 } from './handlers/model-config-handlers';
 
+// Provider Key handlers
+import {
+  storeProviderKey,
+  getProviderKeyStatus,
+  deleteProviderKey,
+  listProviderKeys,
+} from './handlers/provider-key-handlers';
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -190,6 +198,37 @@ export default {
             return addCorsHeaders(response, corsHeaders);
           } else if (method === 'DELETE') {
             const response = await deleteModelConfig(id, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        }
+      }
+
+      // Provider Key routes
+      if (pathParts[0] === 'provider-key') {
+        if (pathParts.length === 1) {
+          // POST /provider-key
+          if (method === 'POST') {
+            const response = await storeProviderKey(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 2) {
+          const instanceId = pathParts[1];
+          // GET /provider-key/{instance_id} - list all providers
+          if (method === 'GET') {
+            const response = await listProviderKeys(instanceId, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 3) {
+          const instanceId = pathParts[1];
+          const provider = pathParts[2];
+          // GET /provider-key/{instance_id}/{provider} - check status
+          if (method === 'GET') {
+            const response = await getProviderKeyStatus(instanceId, provider, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+          // DELETE /provider-key/{instance_id}/{provider}
+          if (method === 'DELETE') {
+            const response = await deleteProviderKey(instanceId, provider, env);
             return addCorsHeaders(response, corsHeaders);
           }
         }
