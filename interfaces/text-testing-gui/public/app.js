@@ -2,10 +2,12 @@
 
 // API Configuration
 const API_URL = 'https://text.distributedelectrons.com';
+const CONFIG_SERVICE_URL = 'https://api.distributedelectrons.com';
 
 // State
 const state = {
-    isGenerating: false
+    isGenerating: false,
+    modelsLoaded: false
 };
 
 // DOM Elements
@@ -41,6 +43,7 @@ const elements = {
 function init() {
     setupEventListeners();
     loadSavedSettings();
+    loadModelsFromConfigService();
 }
 
 // Setup Event Listeners
@@ -75,6 +78,83 @@ function loadSavedSettings() {
         elements.instanceId.value = savedInstanceId;
     }
 
+    if (savedModel) {
+        elements.model.value = savedModel;
+    }
+}
+
+// Load models from Config Service
+async function loadModelsFromConfigService() {
+    try {
+        const response = await fetch(`${CONFIG_SERVICE_URL}/model-config?type=text`);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch models: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.models && Array.isArray(data.models) && data.models.length > 0) {
+            populateModelDropdown(data.models);
+            state.modelsLoaded = true;
+            console.log('Successfully loaded models from Config Service:', data.models.length);
+        } else {
+            throw new Error('No models returned from Config Service');
+        }
+    } catch (error) {
+        console.warn('Failed to load models from Config Service, using hardcoded defaults:', error);
+        populateDefaultModels();
+    }
+}
+
+// Populate model dropdown with dynamic data
+function populateModelDropdown(models) {
+    // Clear existing options
+    elements.model.innerHTML = '';
+
+    // Add models from Config Service
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.model_id;
+
+        // Format display name with provider
+        const displayName = model.display_name || model.model_id;
+        const provider = model.provider ? ` (${model.provider})` : '';
+        option.textContent = `${displayName}${provider}`;
+
+        // Store metadata as data attributes
+        if (model.provider) {
+            option.dataset.provider = model.provider;
+        }
+        if (model.capabilities) {
+            option.dataset.capabilities = JSON.stringify(model.capabilities);
+        }
+        if (model.max_tokens) {
+            option.dataset.maxTokens = model.max_tokens;
+        }
+
+        elements.model.appendChild(option);
+    });
+
+    // Restore saved selection if it exists
+    const savedModel = localStorage.getItem('textGenModel');
+    if (savedModel) {
+        elements.model.value = savedModel;
+    }
+}
+
+// Populate with hardcoded default models (fallback)
+function populateDefaultModels() {
+    elements.model.innerHTML = `
+        <option value="gpt-4o-mini">GPT-4o Mini (OpenAI)</option>
+        <option value="gpt-4o">GPT-4o (OpenAI)</option>
+        <option value="gpt-4-turbo">GPT-4 Turbo (OpenAI)</option>
+        <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Anthropic)</option>
+        <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Anthropic)</option>
+    `;
+
+    // Restore saved selection if it exists
+    const savedModel = localStorage.getItem('textGenModel');
     if (savedModel) {
         elements.model.value = savedModel;
     }
