@@ -1,0 +1,27 @@
+# Stock Media Worker Configuration
+
+name = "stock-media"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Worker settings
+workers_dev = true
+
+# Rate Limiter Durable Object
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RateLimiter"
+script_name = "rate-limiter"
+
+# Environment Variables
+[vars]
+DEFAULT_INSTANCE_ID = "default"
+
+# Secrets (set with: wrangler secret put <NAME>)
+# - PEXELS_API_KEY
+
+# Custom routes
+routes = [
+  { pattern = "media.distributedelectrons.com/*", zone_id = "417d6062ae2113dc20c4910e9f6f691f" }
+]

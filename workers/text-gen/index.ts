@@ -119,8 +119,9 @@ async function handleGenerate(
     }
 
     // Determine provider and model
-    const provider = body.model?.split(':')[0] || env.DEFAULT_PROVIDER || 'openai';
-    const model = body.model || getDefaultModel(provider);
+    const modelParts = body.model?.split(':') || [];
+    const provider = modelParts.length > 1 ? modelParts[0] : (env.DEFAULT_PROVIDER || 'openai');
+    const model = modelParts.length > 1 ? modelParts[1] : (body.model || getDefaultModel(provider));
 
     // Get API key
     const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
@@ -310,7 +311,7 @@ async function generateWithAnthropic(
 function getDefaultModel(provider: string): string {
   const defaults: Record<string, string> = {
     openai: 'gpt-4o-mini',
-    anthropic: 'claude-3-5-sonnet-20241022',
+    anthropic: 'claude-sonnet-4-20250514',
   };
   return defaults[provider.toLowerCase()] || 'gpt-4o-mini';
 }
