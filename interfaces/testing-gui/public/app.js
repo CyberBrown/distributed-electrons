@@ -1,9 +1,13 @@
 // Testing GUI Application Logic
 
+// API Configuration
+const CONFIG_SERVICE_URL = 'https://api.distributedelectrons.com';
+
 // State
 const state = {
     useMockApi: true,
-    isGenerating: false
+    isGenerating: false,
+    modelsLoaded: false
 };
 
 // DOM Elements
@@ -42,6 +46,7 @@ const elements = {
 function init() {
     setupEventListeners();
     loadSavedSettings();
+    loadModelsFromConfigService();
 }
 
 // Setup Event Listeners
@@ -84,6 +89,72 @@ function loadSavedSettings() {
     if (savedInstanceId) {
         elements.instanceId.value = savedInstanceId;
     }
+}
+
+// Load models from Config Service
+async function loadModelsFromConfigService() {
+    try {
+        const response = await fetch(`${CONFIG_SERVICE_URL}/model-config?type=image`);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch models: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.models && Array.isArray(data.models) && data.models.length > 0) {
+            populateModelDropdown(data.models);
+            state.modelsLoaded = true;
+            console.log('Successfully loaded models from Config Service:', data.models.length);
+        } else {
+            throw new Error('No models returned from Config Service');
+        }
+    } catch (error) {
+        console.warn('Failed to load models from Config Service, using hardcoded defaults:', error);
+        populateDefaultModels();
+    }
+}
+
+// Populate model dropdown with dynamic data
+function populateModelDropdown(models) {
+    // Clear existing options
+    elements.model.innerHTML = '';
+
+    // Add "Default" option first
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Default';
+    elements.model.appendChild(defaultOption);
+
+    // Add models from Config Service
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.model_id;
+
+        // Format display name with provider
+        const displayName = model.display_name || model.model_id;
+        const provider = model.provider ? ` (${model.provider})` : '';
+        option.textContent = `${displayName}${provider}`;
+
+        // Store metadata as data attributes
+        if (model.provider) {
+            option.dataset.provider = model.provider;
+        }
+        if (model.capabilities) {
+            option.dataset.capabilities = JSON.stringify(model.capabilities);
+        }
+
+        elements.model.appendChild(option);
+    });
+}
+
+// Populate with hardcoded default models (fallback)
+function populateDefaultModels() {
+    elements.model.innerHTML = `
+        <option value="">Default</option>
+        <option value="ideogram-v2">Ideogram V2</option>
+        <option value="ideogram-v1">Ideogram V1</option>
+    `;
 }
 
 // Save settings to localStorage

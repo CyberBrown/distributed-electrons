@@ -4,7 +4,8 @@
 
 export interface GenerateRequest {
   prompt: string;
-  model?: string;
+  model?: string; // Legacy format: "provider:model" or just "model"
+  model_id?: string; // New format: model ID for dynamic config lookup
   instance_id?: string;
   project_id?: string;
   options?: {

@@ -5,6 +5,7 @@
 export interface GenerateRequest {
   prompt: string;
   model?: string;
+  model_id?: string; // New: Config Service model_id (e.g., "ideogram-v2")
   instance_id?: string;
   project_id?: string;
   options?: {
@@ -47,6 +48,8 @@ export interface Env {
   CDN_URL?: string;
   DEFAULT_INSTANCE_ID?: string;
   DEFAULT_PROVIDER?: string;
+  CONFIG_SERVICE_URL?: string; // URL for Config Service API
+  IDEOGRAM_API_KEY?: string; // Fallback API key
 }
 
 export interface InstanceConfig {
@@ -63,4 +66,39 @@ export interface InstanceConfig {
   worker_urls?: Record<string, string>;
   r2_bucket?: string;
   authorized_users?: string[];
+}
+
+export interface ModelConfig {
+  config_id: string;
+  model_id: string;
+  provider_id: string;
+  display_name: string;
+  description: string;
+  capabilities: {
+    image: boolean;
+    video: boolean;
+    text: boolean;
+    inpainting: boolean;
+  };
+  pricing: {
+    cost_per_image: number;
+    currency: string;
+    billing_unit: string;
+  };
+  rate_limits: {
+    rpm: number;
+    tpm: number;
+    concurrent_requests: number;
+  };
+  payload_mapping: {
+    endpoint: string;
+    method: string;
+    headers: Record<string, string>;
+    body: any;
+    response_mapping: Record<string, string>;
+    defaults?: Record<string, any>;
+  };
+  status: string;
+  created_at: string;
+  updated_at: string;
 }

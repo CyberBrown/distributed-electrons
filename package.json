@@ -19,6 +19,7 @@
     "wrangler:deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 execute DB --file=infrastructure/database/migrations/001-initial.sql",
     "db:seed": "wrangler d1 execute DB --file=infrastructure/database/seed.sql",
+    "db:seed-models": "wrangler d1 execute DB --file=infrastructure/database/seed-models.sql",
     "build": "tsc && npm run lint && npm run test",
     "ci": "npm run typecheck && npm run lint && npm run test"
   },

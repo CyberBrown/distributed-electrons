@@ -34,6 +34,7 @@ script_name = "rate-limiter"
 [vars]
 DEFAULT_PROVIDER = "ideogram"
 CDN_URL = "https://cdn.example.com"
+CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
 
 # Secrets (set with: wrangler secret put <NAME>)
 # - IDEOGRAM_API_KEY
