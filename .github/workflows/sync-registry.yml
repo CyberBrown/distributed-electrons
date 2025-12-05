@@ -31,15 +31,19 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.DEVELOPER_GUIDES_WEBHOOK_URL }}
           SYNC_TOKEN: ${{ secrets.REGISTRY_SYNC_TOKEN }}
+          SERVICES_JSON: ${{ steps.manifest.outputs.services }}
         run: |
+          # Build JSON payload using jq to ensure proper escaping
+          PAYLOAD=$(jq -n \
+            --arg source "github-action" \
+            --arg commit "${{ github.sha }}" \
+            --argjson services "$SERVICES_JSON" \
+            '{source: $source, commit: $commit, services: $services}')
+
           curl -X POST "${WEBHOOK_URL}/api/sync-registry" \
             -H "Authorization: Bearer ${SYNC_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"source\": \"github-action\",
-              \"commit\": \"${{ github.sha }}\",
-              \"services\": ${{ steps.manifest.outputs.services }}
-            }"
+            -d "$PAYLOAD"
 
       - name: Report Result
         if: always()
