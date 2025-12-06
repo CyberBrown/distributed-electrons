@@ -23,7 +23,7 @@ DEFAULT_PROVIDER = "openai"
 # - ANTHROPIC_API_KEY
 # - etc.
 
-# Custom routes
-routes = [
-  { pattern = "text.distributedelectrons.com/*", zone_id = "417d6062ae2113dc20c4910e9f6f691f" }
-]
+# Custom Domain
+[[routes]]
+pattern = "text.distributedelectrons.com"
+custom_domain = true
