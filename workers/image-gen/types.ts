@@ -5,7 +5,7 @@
 export interface GenerateRequest {
   prompt: string;
   model?: string; // Legacy: will be treated as model_id
-  model_id?: string; // Preferred: explicit model config ID
+  model_id?: string; // Preferred: explicit model config ID (e.g., "ideogram-v2")
   instance_id?: string;
   project_id?: string;
   options?: {
@@ -51,7 +51,7 @@ export interface Env {
   DEFAULT_INSTANCE_ID?: string;
   DEFAULT_PROVIDER?: string;
   DEFAULT_MODEL_ID?: string;
-  CONFIG_SERVICE_URL?: string;
+  CONFIG_SERVICE_URL?: string; // URL for Config Service API
 
   // Legacy API keys (fallback when config service unavailable)
   IDEOGRAM_API_KEY?: string;
@@ -73,4 +73,39 @@ export interface InstanceConfig {
   worker_urls?: Record<string, string>;
   r2_bucket?: string;
   authorized_users?: string[];
+}
+
+export interface ModelConfig {
+  config_id: string;
+  model_id: string;
+  provider_id: string;
+  display_name: string;
+  description: string;
+  capabilities: {
+    image: boolean;
+    video: boolean;
+    text: boolean;
+    inpainting: boolean;
+  };
+  pricing: {
+    cost_per_image: number;
+    currency: string;
+    billing_unit: string;
+  };
+  rate_limits: {
+    rpm: number;
+    tpm: number;
+    concurrent_requests: number;
+  };
+  payload_mapping: {
+    endpoint: string;
+    method: string;
+    headers: Record<string, string>;
+    body: any;
+    response_mapping: Record<string, string>;
+    defaults?: Record<string, any>;
+  };
+  status: string;
+  created_at: string;
+  updated_at: string;
 }

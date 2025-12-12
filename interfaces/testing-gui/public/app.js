@@ -1,9 +1,13 @@
 // Testing GUI Application Logic
 
+// API Configuration
+const CONFIG_SERVICE_URL = 'https://api.distributedelectrons.com';
+
 // State
 const state = {
     useMockApi: true,
-    isGenerating: false
+    isGenerating: false,
+    modelsLoaded: false
 };
 
 // DOM Elements
@@ -48,81 +52,7 @@ const modelConfigs = {
 function init() {
     setupEventListeners();
     loadSavedSettings();
-    loadAvailableModels(); // Load models on init
-}
-
-// Load available models from config service
-async function loadAvailableModels() {
-    const configServiceUrl = 'https://config-service.your-subdomain.workers.dev';
-    modelConfigs.loading = true;
-
-    try {
-        const response = await fetch(`${configServiceUrl}/model-config`, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            console.error('Failed to fetch model configs');
-            return;
-        }
-
-        const result = await response.json();
-        modelConfigs.configs = result.data?.configs || result.configs || [];
-
-        populateModelDropdown();
-    } catch (error) {
-        console.error('Error loading model configs:', error);
-        // Use fallback static models if config service unavailable
-        useFallbackModels();
-    } finally {
-        modelConfigs.loading = false;
-    }
-}
-
-// Populate model dropdown with loaded configs
-function populateModelDropdown() {
-    const modelSelect = elements.model;
-
-    if (modelConfigs.configs.length === 0) {
-        return; // Keep existing static options
-    }
-
-    // Clear existing options
-    modelSelect.innerHTML = '<option value="">Auto (Default)</option>';
-
-    // Group by provider
-    const byProvider = modelConfigs.configs.reduce((acc, config) => {
-        if (!acc[config.provider_id]) acc[config.provider_id] = [];
-        acc[config.provider_id].push(config);
-        return acc;
-    }, {});
-
-    // Create optgroups by provider
-    for (const [provider, configs] of Object.entries(byProvider)) {
-        const optgroup = document.createElement('optgroup');
-        optgroup.label = provider.toUpperCase();
-
-        configs
-            .filter(c => c.status === 'active' || c.status === 'beta')
-            .forEach(config => {
-                const option = document.createElement('option');
-                option.value = config.model_id;
-                option.textContent = `${config.display_name}${config.status === 'beta' ? ' (Beta)' : ''}`;
-                option.dataset.capabilities = JSON.stringify(config.capabilities);
-                option.dataset.pricing = config.pricing ? JSON.stringify(config.pricing) : '{}';
-                optgroup.appendChild(option);
-            });
-
-        modelSelect.appendChild(optgroup);
-    }
-}
-
-// Fallback to static models if config service unavailable
-function useFallbackModels() {
-    console.log('Using fallback static model list');
-    // Keep existing static options in HTML
+    loadModelsFromConfigService(); // Load models from Config Service on init
 }
 
 // Handle model selection change
@@ -238,6 +168,72 @@ function loadSavedSettings() {
     if (savedInstanceId) {
         elements.instanceId.value = savedInstanceId;
     }
+}
+
+// Load models from Config Service
+async function loadModelsFromConfigService() {
+    try {
+        const response = await fetch(`${CONFIG_SERVICE_URL}/model-config?type=image`);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch models: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.models && Array.isArray(data.models) && data.models.length > 0) {
+            populateModelDropdown(data.models);
+            state.modelsLoaded = true;
+            console.log('Successfully loaded models from Config Service:', data.models.length);
+        } else {
+            throw new Error('No models returned from Config Service');
+        }
+    } catch (error) {
+        console.warn('Failed to load models from Config Service, using hardcoded defaults:', error);
+        populateDefaultModels();
+    }
+}
+
+// Populate model dropdown with dynamic data
+function populateModelDropdown(models) {
+    // Clear existing options
+    elements.model.innerHTML = '';
+
+    // Add "Default" option first
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Default';
+    elements.model.appendChild(defaultOption);
+
+    // Add models from Config Service
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.model_id;
+
+        // Format display name with provider
+        const displayName = model.display_name || model.model_id;
+        const provider = model.provider ? ` (${model.provider})` : '';
+        option.textContent = `${displayName}${provider}`;
+
+        // Store metadata as data attributes
+        if (model.provider) {
+            option.dataset.provider = model.provider;
+        }
+        if (model.capabilities) {
+            option.dataset.capabilities = JSON.stringify(model.capabilities);
+        }
+
+        elements.model.appendChild(option);
+    });
+}
+
+// Populate with hardcoded default models (fallback)
+function populateDefaultModels() {
+    elements.model.innerHTML = `
+        <option value="">Default</option>
+        <option value="ideogram-v2">Ideogram V2</option>
+        <option value="ideogram-v1">Ideogram V1</option>
+    `;
 }
 
 // Save settings to localStorage

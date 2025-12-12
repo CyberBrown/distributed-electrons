@@ -22,13 +22,16 @@ A multi-agent AI platform built on Cloudflare Workers infrastructure.
 │  BACKENDS (Cloudflare Workers)                                  │
 │  ├── api.distributedelectrons.com        → Config Service       │
 │  ├── images.distributedelectrons.com     → Image Generation     │
-│  └── text.distributedelectrons.com       → Text Generation      │
+│  ├── text-gen.solamp.workers.dev         → Text Generation      │
+│  ├── audio-gen.solamp.workers.dev        → Audio Generation     │
+│  ├── stock-media.solamp.workers.dev      → Stock Media Search   │
+│  └── render-service.solamp.workers.dev   → Video Rendering      │
 │                                                                 │
 │  STORAGE & STATE                                                │
 │  ├── D1 Database    → instances, users, projects, model_configs │
 │  ├── KV Namespace   → caching                                   │
-│  ├── R2 Bucket      → generated images                          │
-│  └── Durable Objects → rate limiting                            │
+│  ├── R2 Buckets     → de-audio-storage, de-render-storage       │
+│  └── Durable Objects → rate limiting (shared)                   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -40,8 +43,11 @@ A multi-agent AI platform built on Cloudflare Workers infrastructure.
 | Service | URL | Status | Description |
 |---------|-----|--------|-------------|
 | Config Service | api.distributedelectrons.com | ✅ Live | Central config, auth, model management |
-| Image Gen | images.distributedelectrons.com | ✅ Live | Ideogram image generation |
-| Text Gen | text.distributedelectrons.com | ✅ Live | OpenAI & Anthropic text generation |
+| Image Gen | images.distributedelectrons.com | ✅ Live | Multi-provider image generation (dynamic) |
+| Text Gen | text-gen.solamp.workers.dev | ✅ Live | Multi-provider text generation (dynamic) |
+| Audio Gen | audio-gen.solamp.workers.dev | ✅ Live | ElevenLabs text-to-speech |
+| Stock Media | stock-media.solamp.workers.dev | ✅ Live | Pexels stock videos/images |
+| Render Service | render-service.solamp.workers.dev | ✅ Live | Shotstack video rendering |
 | Admin Panel | admin.distributedelectrons.com | ✅ Live | Instance/user/model management |
 | Monitoring | monitoring.distributedelectrons.com | ✅ Live | Real-time metrics dashboard |
 | Image Testing | testing.distributedelectrons.com | ✅ Live | Test image generation |
@@ -55,84 +61,76 @@ A multi-agent AI platform built on Cloudflare Workers infrastructure.
 cloudflare-multiagent-system/
 ├── infrastructure/
 │   ├── config-service/     # Central API (D1 + KV)
-│   ├── database/           # D1 schema & migrations
+│   ├── database/           # D1 schema, migrations & seed files
 │   ├── auth/               # Authentication middleware
 │   └── lookup/             # Instance resolution
 ├── workers/
-│   ├── image-gen/          # Image generation worker
-│   ├── text-gen/           # Text generation worker
+│   ├── image-gen/          # Image generation (multi-provider)
+│   ├── text-gen/           # Text generation (multi-provider)
+│   ├── audio-gen/          # Audio generation (ElevenLabs)
+│   ├── stock-media/        # Stock media search (Pexels)
+│   ├── render-service/     # Video rendering (Shotstack)
 │   └── shared/
-│       ├── provider-adapters/  # Ideogram, OpenAI, Anthropic
+│       ├── provider-adapters/  # Ideogram, OpenAI, Anthropic, ElevenLabs
 │       ├── rate-limiter/       # Durable Object rate limiter
 │       ├── r2-manager/         # R2 storage utilities
-│       └── payload-mapper/     # Dynamic model config mapping
+│       └── utils/              # Payload mapper, helpers
 ├── interfaces/
 │   ├── admin-panel/        # React admin UI
 │   ├── monitoring/         # React metrics dashboard
-│   ├── testing-gui/        # Image gen testing (static)
-│   └── text-testing-gui/   # Text gen testing (static)
+│   ├── testing-gui/        # Image gen testing (dynamic model loading)
+│   └── text-testing-gui/   # Text gen testing (dynamic model loading)
 ├── scripts/                # Deployment automation
 └── docs/                   # Specifications
 ```
 
 ---
 
-## Current Status: ~85% Complete
+## Current Status: ~95% Complete
 
 ### What's Working
-- All 4 Workers deployed and responding
-- All 4 Interfaces deployed with custom domains
-- D1 database with full schema (including model_configs table)
-- Rate limiting via Durable Objects
-- R2 storage for generated images
-- Admin Panel with model configuration UI
-- CI/CD via GitHub Actions
+- ✅ All 7 Workers deployed and responding (config, image-gen, text-gen, audio-gen, stock-media, render-service, rate-limiter)
+- ✅ All 4 Interfaces deployed with custom domains
+- ✅ D1 database with full schema and 10 seeded model configs
+- ✅ Dynamic model config integration in workers
+- ✅ Dynamic model loading in testing GUIs
+- ✅ Rate limiting via Durable Objects
+- ✅ R2 storage for generated content (images, audio, renders)
+- ✅ Admin Panel with model configuration UI
+- ✅ CI/CD via GitHub Actions (all workers included)
+
+### Model Configs in Database
+| Provider | Models |
+|----------|--------|
+| Anthropic | Claude 3.5 Sonnet, Claude 3.5 Haiku |
+| OpenAI | GPT-4o, GPT-4o-mini, DALL-E 3, DALL-E 2 |
+| Ideogram | Ideogram V2 |
+| Gemini | Veo 3.1, Flash Nano Banana |
+| ElevenLabs | Multilingual V2 |
 
 ### What's Remaining
-See "Next Steps" below.
+- Set up custom DNS for new workers (audio, media, render, text)
+- Add OPENAI_API_KEY to text-gen worker (optional, for OpenAI support)
+- Production testing of dynamic model config system
+- Implement streaming responses for text generation (future)
 
 ---
 
-## Next Steps to Complete Deployment
+## Recent Updates (December 2024)
 
-### 1. Integrate Model Config System into Workers
+### Dynamic Model Config Integration
+- **Image Gen Worker**: Now accepts `model_id` parameter, fetches config from Config Service, uses payload mapper for provider-agnostic requests
+- **Text Gen Worker**: Supports both new `model_id` and legacy `model: "provider:model-name"` formats with backwards compatibility
+- **Testing GUIs**: Dynamically load available models from Config Service with fallback to hardcoded defaults
 
-The model configuration system is built (database, API, admin UI, payload mapper utility) but workers still use hardcoded provider logic.
+### New Workers Added
+- **audio-gen**: ElevenLabs text-to-speech (R2 storage: de-audio-storage)
+- **stock-media**: Pexels API for stock videos/images
+- **render-service**: Shotstack video rendering (R2 storage: de-render-storage)
 
-**Image Gen Worker** (`workers/image-gen/index.ts`):
-- Fetch model config from Config Service based on `model_id`
-- Use payload mapper to transform requests dynamically
-- Support multiple providers (not just Ideogram)
-
-**Text Gen Worker** (`workers/text-gen/index.ts`):
-- Replace hardcoded OpenAI/Anthropic logic with dynamic model selection
-- Use payload mapper for unified request formatting
-
-### 2. Dynamic Model Loading in Testing GUIs
-
-**Text Testing GUI** (`interfaces/text-testing-gui/public/app.js`):
-- Load available models from Config Service on instance selection
-- Populate model dropdown dynamically
-- Show model capabilities and pricing info
-
-**Image Testing GUI** (`interfaces/testing-gui/public/app.js`):
-- Same dynamic model loading
-
-### 3. Seed Model Configurations
-
-Add example model configs to the database:
-- Ideogram V2 (image)
-- DALL-E 3 (image)
-- GPT-4o (text)
-- Claude 3.5 Sonnet (text)
-
-Can be done via Admin Panel or SQL migration.
-
-### 4. Documentation Updates
-
-- Admin guide for managing model configs
-- API documentation for model config endpoints
-- Update main README with final architecture
+### CI/CD Updates
+- GitHub Actions deploy.yml updated to include all 7 workers
+- Rate limiter deployed as shared dependency
 
 ---
 
@@ -162,18 +160,35 @@ npm test
 ### Config Service (api.distributedelectrons.com)
 - `GET /health` - Health check
 - `GET /instance/:id` - Get instance config
-- `GET /model-config` - List model configurations
+- `GET /model-config` - List model configurations (supports `?type=text|image`)
+- `GET /model-config/:id` - Get specific model config
 - `POST /model-config` - Create model config
 - `PUT /model-config/:id` - Update model config
 - `DELETE /model-config/:id` - Delete model config
 
 ### Image Gen (images.distributedelectrons.com)
-- `POST /generate` - Generate image
+- `POST /generate` - Generate image (accepts `model_id` for dynamic model selection)
 - `GET /status/:id` - Check generation status
 - `GET /health` - Health check
 
-### Text Gen (text.distributedelectrons.com)
-- `POST /generate` - Generate text
+### Text Gen (text-gen.solamp.workers.dev)
+- `POST /generate` - Generate text (accepts `model_id` or legacy `model: "provider:model"`)
+- `GET /health` - Health check
+
+### Audio Gen (audio-gen.solamp.workers.dev)
+- `POST /synthesize` - Text-to-speech synthesis
+- `GET /audio/:id.mp3` - Retrieve generated audio
+- `GET /voices` - List available voices
+- `GET /health` - Health check
+
+### Stock Media (stock-media.solamp.workers.dev)
+- `POST /search/videos` - Search stock videos
+- `POST /search/images` - Search stock images
+- `GET /health` - Health check
+
+### Render Service (render-service.solamp.workers.dev)
+- `POST /render` - Submit video render job
+- `GET /render/:id` - Check render status
 - `GET /health` - Health check
 
 ---

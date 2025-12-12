@@ -1,12 +1,17 @@
-# Text Generation Worker Configuration
+# Audio Generation Worker Configuration
 
-name = "text-gen"
+name = "audio-gen"
 main = "index.ts"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 # Worker settings
 workers_dev = true
+
+# R2 Storage for audio files
+[[r2_buckets]]
+binding = "AUDIO_STORAGE"
+bucket_name = "de-audio-storage"
 
 # Rate Limiter Durable Object
 [[durable_objects.bindings]]
@@ -16,15 +21,13 @@ script_name = "rate-limiter"
 
 # Environment Variables
 [vars]
-DEFAULT_PROVIDER = "openai"
-CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
+DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
+DEFAULT_MODEL_ID = "eleven_monolingual_v1"
 
 # Secrets (set with: wrangler secret put <NAME>)
-# - OPENAI_API_KEY
-# - ANTHROPIC_API_KEY
-# - etc.
+# - ELEVENLABS_API_KEY
 
 # Custom Domain
 [[routes]]
-pattern = "text.distributedelectrons.com"
+pattern = "audio.distributedelectrons.com"
 custom_domain = true

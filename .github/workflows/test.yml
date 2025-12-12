@@ -30,8 +30,8 @@ jobs:
       - name: Run type checking
         run: npm run typecheck
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests with coverage
+        run: npm run test:coverage
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
@@ -39,6 +39,7 @@ jobs:
         with:
           files: ./coverage/coverage-final.json
           fail_ci_if_error: false
+        continue-on-error: true
 
   security-scan:
     runs-on: ubuntu-latest

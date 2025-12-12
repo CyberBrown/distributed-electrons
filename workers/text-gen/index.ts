@@ -13,13 +13,10 @@ import type {
   ModelConfig,
   PayloadMapping,
 } from './types';
-
-// Import payload mapper utilities
 import {
   applyPayloadMapping,
   applyResponseMapping,
   validatePayloadMapping,
-  type ProviderRequest,
 } from '../shared/utils/payload-mapper';
 
 export default {
@@ -298,6 +295,9 @@ async function generateWithModelConfig(
   const userInputs: Record<string, any> = {
     user_prompt: prompt,
     prompt: prompt, // Support both naming conventions
+    max_tokens: options.max_tokens,
+    temperature: options.temperature,
+    top_p: options.top_p,
     ...options,
   };
 
@@ -340,6 +340,8 @@ async function generateWithModelConfig(
     metadata: {
       ...extracted,
       raw_response: responseData,
+      config_id: modelConfig.config_id,
+      display_name: modelConfig.display_name,
     },
   };
 }
@@ -463,7 +465,7 @@ async function generateWithAnthropic(
 function getDefaultModel(provider: string): string {
   const defaults: Record<string, string> = {
     openai: 'gpt-4o-mini',
-    anthropic: 'claude-3-5-sonnet-20241022',
+    anthropic: 'claude-sonnet-4-20250514',
   };
   return defaults[provider.toLowerCase()] || 'gpt-4o-mini';
 }
