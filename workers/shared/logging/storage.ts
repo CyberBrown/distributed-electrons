@@ -184,7 +184,7 @@ export class LogStorage {
    */
   async deleteOlderThan(days: number): Promise<number> {
     const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
+    cutoffDate.setUTCDate(cutoffDate.getUTCDate() - days);
     const cutoffISO = cutoffDate.toISOString();
 
     const result = await this.db

@@ -157,6 +157,30 @@ CREATE INDEX idx_model_configs_status ON model_configs(status);
 CREATE INDEX idx_model_configs_created_at ON model_configs(created_at DESC);
 
 -- ============================================================================
+-- REQUEST ROUTER TABLES (Migration 003)
+-- See: infrastructure/database/migrations/003-request-router.sql
+-- ============================================================================
+-- requests          - Incoming requests from client apps
+-- rate_limits       - Provider/model rate limit configurations
+-- prompts           - Prompt library for specialized task types
+-- deliverables      - Results/outputs from processed requests
+-- queue_stats       - Real-time queue statistics per provider/model
+-- task_classifications - Rules for query -> task type classification
+-- provider_routing_rules - Rules for selecting provider/model
+-- ============================================================================
+
+-- ============================================================================
+-- EVENTS & ACTIVITY TRACKING TABLES (Migration 004)
+-- See: infrastructure/database/migrations/004-events.sql
+-- ============================================================================
+-- events            - Core event log for all trackable actions
+-- event_subscriptions - Webhook subscriptions for real-time notifications
+-- event_deliveries  - Track webhook delivery attempts
+-- activity_feed     - Denormalized feed for fast retrieval
+-- metrics_snapshots - Periodic snapshots of key metrics
+-- ============================================================================
+
+-- ============================================================================
 -- ENCRYPTION NOTES
 -- ============================================================================
 -- Cloudflare D1 provides encryption at rest by default

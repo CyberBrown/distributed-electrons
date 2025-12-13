@@ -45,6 +45,11 @@ export default {
         return addCorsHeaders(response);
       }
 
+      if (url.pathname === '/generate/stream' && request.method === 'POST') {
+        const response = await handleGenerateStream(request, env, requestId);
+        return addCorsHeaders(response);
+      }
+
       if (url.pathname === '/health' && request.method === 'GET') {
         return addCorsHeaders(Response.json({
           status: 'healthy',
@@ -547,6 +552,300 @@ async function fetchModelConfig(
     console.error(`Error fetching model config for ${modelId}:`, error);
     return null;
   }
+}
+
+/**
+ * Handle streaming text generation request
+ */
+async function handleGenerateStream(
+  request: Request,
+  env: Env,
+  requestId: string
+): Promise<Response> {
+  try {
+    // Parse request body
+    const body: GenerateRequest = await request.json();
+
+    // Validate request
+    if (!body.prompt || body.prompt.trim() === '') {
+      return createErrorResponse(
+        'Prompt is required',
+        'INVALID_REQUEST',
+        requestId,
+        400
+      );
+    }
+
+    // Extract instance ID
+    const instanceId =
+      body.instance_id ||
+      request.headers.get('X-Instance-ID') ||
+      env.DEFAULT_INSTANCE_ID ||
+      'default';
+
+    // Get instance configuration
+    const instanceConfig = await getInstanceConfig(instanceId, env);
+
+    if (!instanceConfig) {
+      return createErrorResponse(
+        `Instance not found: ${instanceId}`,
+        'INSTANCE_NOT_FOUND',
+        requestId,
+        404
+      );
+    }
+
+    // Determine provider and model
+    const provider = body.model?.split(':')[0] || env.DEFAULT_PROVIDER || 'openai';
+    const model = body.model || getDefaultModel(provider);
+
+    // Get API key
+    const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
+    if (!apiKey) {
+      return createErrorResponse(
+        `API key not configured for provider: ${provider}`,
+        'MISSING_API_KEY',
+        requestId,
+        500
+      );
+    }
+
+    // Create streaming response based on provider
+    let stream: ReadableStream;
+
+    switch (provider.toLowerCase()) {
+      case 'openai':
+        stream = await streamWithOpenAI(model, body.prompt, body.options || {}, apiKey, requestId);
+        break;
+      case 'anthropic':
+        stream = await streamWithAnthropic(model, body.prompt, body.options || {}, apiKey, requestId);
+        break;
+      default:
+        return createErrorResponse(
+          `Streaming not supported for provider: ${provider}`,
+          'UNSUPPORTED_PROVIDER',
+          requestId,
+          400
+        );
+    }
+
+    // Return SSE response
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Request-ID': requestId,
+      },
+    });
+  } catch (error) {
+    console.error('Streaming error:', error);
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Streaming failed',
+      'STREAMING_ERROR',
+      requestId,
+      500
+    );
+  }
+}
+
+/**
+ * Stream text generation using OpenAI API
+ */
+async function streamWithOpenAI(
+  model: string,
+  prompt: string,
+  options: any,
+  apiKey: string,
+  requestId: string
+): Promise<ReadableStream> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: options.max_tokens || 1000,
+      temperature: options.temperature || 0.7,
+      top_p: options.top_p || 1.0,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OpenAI API error (${response.status}): ${error}`);
+  }
+
+  if (!response.body) {
+    throw new Error('No response body from OpenAI');
+  }
+
+  // Transform OpenAI's SSE stream to our format
+  return transformOpenAIStream(response.body, requestId);
+}
+
+/**
+ * Transform OpenAI's SSE stream to our standardized format
+ */
+function transformOpenAIStream(inputStream: ReadableStream, requestId: string): ReadableStream {
+  const reader = inputStream.getReader();
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = '';
+
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          // Send final done message
+          const doneEvent = `data: ${JSON.stringify({ text: '', done: true, request_id: requestId })}\n\n`;
+          controller.enqueue(encoder.encode(doneEvent));
+          controller.close();
+          return;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+
+            if (data === '[DONE]') {
+              const doneEvent = `data: ${JSON.stringify({ text: '', done: true, request_id: requestId })}\n\n`;
+              controller.enqueue(encoder.encode(doneEvent));
+              continue;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content;
+
+              if (content) {
+                const event = `data: ${JSON.stringify({ text: content, done: false, request_id: requestId })}\n\n`;
+                controller.enqueue(encoder.encode(event));
+              }
+            } catch {
+              // Skip malformed JSON
+            }
+          }
+        }
+      } catch (error) {
+        const errorEvent = `data: ${JSON.stringify({ error: 'Stream error', done: true, request_id: requestId })}\n\n`;
+        controller.enqueue(encoder.encode(errorEvent));
+        controller.close();
+      }
+    },
+    cancel() {
+      reader.cancel();
+    },
+  });
+}
+
+/**
+ * Stream text generation using Anthropic API
+ */
+async function streamWithAnthropic(
+  model: string,
+  prompt: string,
+  options: any,
+  apiKey: string,
+  requestId: string
+): Promise<ReadableStream> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: options.max_tokens || 1000,
+      temperature: options.temperature || 0.7,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Anthropic API error (${response.status}): ${error}`);
+  }
+
+  if (!response.body) {
+    throw new Error('No response body from Anthropic');
+  }
+
+  // Transform Anthropic's SSE stream to our format
+  return transformAnthropicStream(response.body, requestId);
+}
+
+/**
+ * Transform Anthropic's SSE stream to our standardized format
+ */
+function transformAnthropicStream(inputStream: ReadableStream, requestId: string): ReadableStream {
+  const reader = inputStream.getReader();
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = '';
+
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          const doneEvent = `data: ${JSON.stringify({ text: '', done: true, request_id: requestId })}\n\n`;
+          controller.enqueue(encoder.encode(doneEvent));
+          controller.close();
+          return;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+
+            try {
+              const parsed = JSON.parse(data);
+
+              // Anthropic sends different event types
+              if (parsed.type === 'content_block_delta') {
+                const content = parsed.delta?.text;
+                if (content) {
+                  const event = `data: ${JSON.stringify({ text: content, done: false, request_id: requestId })}\n\n`;
+                  controller.enqueue(encoder.encode(event));
+                }
+              } else if (parsed.type === 'message_stop') {
+                const doneEvent = `data: ${JSON.stringify({ text: '', done: true, request_id: requestId })}\n\n`;
+                controller.enqueue(encoder.encode(doneEvent));
+              }
+            } catch {
+              // Skip malformed JSON
+            }
+          }
+        }
+      } catch (error) {
+        const errorEvent = `data: ${JSON.stringify({ error: 'Stream error', done: true, request_id: requestId })}\n\n`;
+        controller.enqueue(encoder.encode(errorEvent));
+        controller.close();
+      }
+    },
+    cancel() {
+      reader.cancel();
+    },
+  });
 }
 
 /**

@@ -112,3 +112,14 @@ export interface ModelConfig {
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * Streaming response event format (SSE)
+ * Each event is sent as: data: {StreamEvent}\n\n
+ */
+export interface StreamEvent {
+  text: string;
+  done: boolean;
+  request_id: string;
+  error?: string;
+}

@@ -1,0 +1,37 @@
+# Intake Worker Configuration
+
+name = "intake"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Worker settings
+workers_dev = true
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "de-database"
+database_id = "placeholder-replace-with-actual-id"
+
+# Request Router Durable Object (references the shared DO)
+[[durable_objects.bindings]]
+name = "REQUEST_ROUTER"
+class_name = "RequestRouter"
+script_name = "request-router"
+
+# Rate Limiter Durable Object (for intake throttling)
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RateLimiter"
+script_name = "rate-limiter"
+
+# Environment Variables
+[vars]
+CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
+DEFAULT_INSTANCE_ID = "default"
+
+# Custom Domain
+[[routes]]
+pattern = "intake.distributedelectrons.com"
+custom_domain = true

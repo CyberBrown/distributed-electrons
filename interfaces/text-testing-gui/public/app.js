@@ -21,6 +21,7 @@ const elements = {
     model: document.getElementById('model'),
     maxTokens: document.getElementById('maxTokens'),
     temperature: document.getElementById('temperature'),
+    streamMode: document.getElementById('streamMode'),
     generateBtn: document.getElementById('generateBtn'),
     statusMessage: document.getElementById('statusMessage'),
     toggleAdvanced: document.getElementById('toggleAdvanced'),
@@ -220,6 +221,7 @@ async function handleSubmit(e) {
     const model = elements.model.value;
     const maxTokens = parseInt(elements.maxTokens.value);
     const temperature = parseFloat(elements.temperature.value);
+    const streamMode = elements.streamMode?.checked || false;
 
     // Validate
     if (!apiKey || !instanceId || !prompt || !model) {
@@ -230,39 +232,170 @@ async function handleSubmit(e) {
     // Show loading state
     showLoadingState();
 
+    const startTime = Date.now();
+
     try {
-        // Call API
-        const response = await fetch(`${API_URL}/generate`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-API-Key': apiKey
-            },
-            body: JSON.stringify({
-                prompt,
-                model,
-                instance_id: instanceId,
-                options: {
-                    max_tokens: maxTokens,
-                    temperature
-                }
-            })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+        if (streamMode) {
+            // Streaming mode
+            await handleStreamingGeneration(apiKey, instanceId, prompt, model, maxTokens, temperature, startTime);
+        } else {
+            // Regular mode
+            await handleRegularGeneration(apiKey, instanceId, prompt, model, maxTokens, temperature, startTime);
         }
-
-        // Show results
-        displayResults(data);
-        showSuccess('Text generated successfully!');
     } catch (error) {
         console.error('Generation error:', error);
         showError(error.message || 'Failed to generate text. Please check your API key and try again.');
         resetToNoResults();
     }
+}
+
+// Handle Regular (non-streaming) Generation
+async function handleRegularGeneration(apiKey, instanceId, prompt, model, maxTokens, temperature, startTime) {
+    const response = await fetch(`${API_URL}/generate`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey
+        },
+        body: JSON.stringify({
+            prompt,
+            model,
+            instance_id: instanceId,
+            options: {
+                max_tokens: maxTokens,
+                temperature
+            }
+        })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    // Show results
+    displayResults(data);
+    showSuccess('Text generated successfully!');
+}
+
+// Handle Streaming Generation
+async function handleStreamingGeneration(apiKey, instanceId, prompt, model, maxTokens, temperature, startTime) {
+    const response = await fetch(`${API_URL}/generate/stream`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey
+        },
+        body: JSON.stringify({
+            prompt,
+            model,
+            instance_id: instanceId,
+            options: {
+                max_tokens: maxTokens,
+                temperature
+            }
+        })
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    // Prepare for streaming display
+    showStreamingResults();
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let requestId = '';
+    let buffer = '';
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) {
+                break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6).trim();
+
+                    if (!data) continue;
+
+                    try {
+                        const parsed = JSON.parse(data);
+
+                        if (parsed.error) {
+                            throw new Error(parsed.error);
+                        }
+
+                        if (parsed.request_id) {
+                            requestId = parsed.request_id;
+                        }
+
+                        if (parsed.text) {
+                            fullText += parsed.text;
+                            elements.generatedText.textContent = fullText;
+                            // Auto-scroll to bottom
+                            elements.generatedText.scrollTop = elements.generatedText.scrollHeight;
+                        }
+
+                        if (parsed.done) {
+                            // Stream complete
+                            const generationTime = Date.now() - startTime;
+                            displayStreamingMetadata(model, generationTime, requestId);
+                            showSuccess('Text generated successfully!');
+                        }
+                    } catch (parseError) {
+                        // Skip malformed JSON
+                        console.warn('Failed to parse SSE data:', data);
+                    }
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+        state.isGenerating = false;
+        elements.generateBtn.disabled = false;
+        elements.generateBtn.textContent = 'Generate Text';
+    }
+}
+
+// Show streaming results container
+function showStreamingResults() {
+    state.isGenerating = true;
+    elements.loadingState.classList.add('hidden');
+    elements.noResults.classList.add('hidden');
+    elements.resultsDisplay.classList.remove('hidden');
+    elements.generatedText.textContent = '';
+    elements.generateBtn.textContent = 'Streaming...';
+
+    // Set initial metadata values
+    elements.metaProvider.textContent = 'Streaming...';
+    elements.metaModel.textContent = '-';
+    elements.metaTokens.textContent = '-';
+    elements.metaTime.textContent = '-';
+    elements.metaRequestId.textContent = '-';
+}
+
+// Display streaming metadata when complete
+function displayStreamingMetadata(model, generationTime, requestId) {
+    // Extract provider from model name
+    const provider = model.includes('gpt') ? 'openai' : model.includes('claude') ? 'anthropic' : 'unknown';
+
+    elements.metaProvider.textContent = provider;
+    elements.metaModel.textContent = model;
+    elements.metaTokens.textContent = 'N/A (streaming)';
+    elements.metaTime.textContent = `${generationTime}ms`;
+    elements.metaRequestId.textContent = requestId || '-';
 }
 
 // Show Loading State
