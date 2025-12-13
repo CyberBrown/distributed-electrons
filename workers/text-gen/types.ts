@@ -5,7 +5,7 @@
 export interface GenerateRequest {
   prompt: string;
   model?: string; // Legacy format: "provider:model" or just "model"
-  model_id?: string; // Model ID to fetch config from Config Service
+  model_id?: string; // Model ID for dynamic config lookup from Config Service
   instance_id?: string;
   project_id?: string;
   options?: {

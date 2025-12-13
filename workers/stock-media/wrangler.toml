@@ -21,7 +21,7 @@ DEFAULT_INSTANCE_ID = "default"
 # Secrets (set with: wrangler secret put <NAME>)
 # - PEXELS_API_KEY
 
-# Custom Domain
-[[routes]]
-pattern = "media.distributedelectrons.com"
-custom_domain = true
+# Custom routes
+routes = [
+  { pattern = "media.distributedelectrons.com/*", zone_id = "417d6062ae2113dc20c4910e9f6f691f" }
+]

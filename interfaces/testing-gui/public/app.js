@@ -52,7 +52,7 @@ const modelConfigs = {
 function init() {
     setupEventListeners();
     loadSavedSettings();
-    loadModelsFromConfigService(); // Load models from Config Service on init
+    loadModelsFromConfigService();
 }
 
 // Handle model selection change
