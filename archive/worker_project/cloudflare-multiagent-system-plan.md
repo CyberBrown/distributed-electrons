@@ -18,7 +18,7 @@ Migration of 120-agent Content Forge system to Cloudflare Workers infrastructure
 ### Hierarchical Model: Organization → Instance → Project
 
 **Organization**
-- Top-level entity (e.g., Solamp Inc., Voltage Labs)
+- Top-level entity (e.g., Acme Corp., Voltage Labs)
 - Has Admins who manage everything below
 
 **Instance** (Key concept - like a VM)

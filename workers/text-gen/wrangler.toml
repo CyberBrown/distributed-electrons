@@ -17,6 +17,7 @@ script_name = "rate-limiter"
 # Environment Variables
 [vars]
 DEFAULT_PROVIDER = "openai"
+CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
 
 # Secrets (set with: wrangler secret put <NAME>)
 # - OPENAI_API_KEY

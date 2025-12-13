@@ -310,7 +310,7 @@ function CreateInstanceModal({ onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     instance_id: '',
     name: '',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     r2_bucket: '',
     rate_limits: {
       ideogram: {

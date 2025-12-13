@@ -1065,7 +1065,7 @@ Reads config:
 ```json
 {
   "instance_id": "production",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "api_keys": { "ideogram": "..." },
   "rate_limits": { "ideogram": { "rpm": 500 } },
   "r2_bucket": "prod-images"

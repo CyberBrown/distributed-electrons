@@ -1,12 +1,26 @@
 #!/bin/bash
 
-# Custom Domain Setup Script for distributedelectrons.com
+# Custom Domain Setup Script for your-domain.com
 # This script automates DNS and Pages custom domain configuration
 
 set -e
 
-DOMAIN="distributedelectrons.com"
-ACCOUNT_ID="52b1c60ff2a24fb21c1ef9a429e63261"
+# Configuration - Set these environment variables before running
+DOMAIN="${CLOUDFLARE_DOMAIN:-your-domain.com}"
+ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
+
+# Check required environment variables
+if [ -z "$ACCOUNT_ID" ]; then
+  echo "Error: CLOUDFLARE_ACCOUNT_ID environment variable not set"
+  echo "Set it with: export CLOUDFLARE_ACCOUNT_ID='your-account-id'"
+  exit 1
+fi
+
+if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+  echo "Error: CLOUDFLARE_API_TOKEN environment variable not set"
+  echo "Set it with: export CLOUDFLARE_API_TOKEN='your-api-token'"
+  exit 1
+fi
 
 echo "============================================"
 echo "Custom Domain Setup for $DOMAIN"

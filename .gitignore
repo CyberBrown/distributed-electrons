@@ -59,6 +59,9 @@ credentials.json
 *.pem
 *.cert
 
+# Claude Code local settings (contains user-specific permissions)
+.claude/settings.local.json
+
 # OS files
 Thumbs.db
 .DS_Store

@@ -1,0 +1,9 @@
+{
+  "name": "text-testing-gui",
+  "version": "1.0.0",
+  "description": "Text Generation Testing GUI for Cloudflare Multi-Agent System",
+  "private": true,
+  "scripts": {
+    "deploy": "npx wrangler pages deploy public --project-name=text-testing-gui"
+  }
+}

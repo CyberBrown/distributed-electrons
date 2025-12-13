@@ -23,7 +23,7 @@ Authorization: Bearer {api_key}
 ```json
 {
   "instance_id": "production",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "name": "Production Instance",
   "api_keys": {
     "ideogram": "ide_...xxx"
@@ -64,7 +64,7 @@ Content-Type: application/json
 
 {
   "instance_id": "staging",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "name": "Staging Instance",
   "api_keys": {
     "ideogram": "ide_staging_key"
@@ -83,7 +83,7 @@ Content-Type: application/json
 ```json
 {
   "instance_id": "staging",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "name": "Staging Instance",
   "created_at": "2025-11-20T12:30:00Z",
   "worker_urls": {
@@ -144,7 +144,7 @@ Content-Type: application/json
   "user_id": "user_123",
   "email": "developer@example.com",
   "role": "user",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "instances": ["production", "development"],
   "created_at": "2025-01-15T00:00:00Z"
 }
@@ -163,7 +163,7 @@ Content-Type: application/json
 {
   "email": "newdev@example.com",
   "role": "user",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "instances": ["development"]
 }
 ```

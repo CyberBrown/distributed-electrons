@@ -3,7 +3,7 @@
 ## Hierarchical Model: Organization → Instance → Project
 
 ### Organization
-- Top-level entity (e.g., Solamp Inc., Voltage Labs)
+- Top-level entity (e.g., Acme Corp., Voltage Labs)
 - Has Admins who manage everything below
 - Multiple instances can belong to one organization
 

@@ -10,8 +10,9 @@ import type {
   ErrorResponse,
   InstanceConfig,
   TextResult,
+  ModelConfig,
+  PayloadMapping,
 } from './types';
-import type { ModelConfig } from './model-config-types';
 import {
   applyPayloadMapping,
   applyResponseMapping,
@@ -124,87 +125,90 @@ async function handleGenerate(
       );
     }
 
-    // NEW: Try dynamic model config if model_id is provided
+    let result: TextResult;
+
+    // Check if model_id is provided - use dynamic model config if available
     if (body.model_id) {
-      try {
-        const modelConfig = await fetchModelConfig(body.model_id);
+      console.log(`Fetching model config for: ${body.model_id}`);
 
-        if (modelConfig && validatePayloadMapping(modelConfig.payload_mapping)) {
-          // Get API key based on provider
-          const provider = modelConfig.provider_id;
-          const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
+      const modelConfig = await fetchModelConfig(body.model_id, env);
 
-          if (!apiKey) {
-            return createErrorResponse(
-              `API key not configured for provider: ${provider}`,
-              'MISSING_API_KEY',
-              requestId,
-              500
-            );
-          }
-
-          // Generate text using dynamic config
-          const result = await generateTextWithConfig(
-            modelConfig,
-            body.prompt,
-            body.options || {},
-            apiKey
+      if (modelConfig) {
+        // Verify this is a text generation model
+        if (!modelConfig.capabilities.text) {
+          return createErrorResponse(
+            `Model ${body.model_id} does not support text generation`,
+            'INVALID_MODEL_CAPABILITY',
+            requestId,
+            400
           );
-
-          // Calculate generation time
-          const generationTime = Date.now() - startTime;
-
-          // Return success response
-          const response: GenerateResponse = {
-            success: true,
-            text: result.text,
-            metadata: {
-              provider: result.provider,
-              model: result.model,
-              tokens_used: result.tokens_used,
-              generation_time_ms: generationTime,
-            },
-            request_id: requestId,
-            timestamp: new Date().toISOString(),
-          };
-
-          return Response.json(response, {
-            headers: {
-              'X-Request-ID': requestId,
-            },
-          });
         }
-      } catch (configError) {
-        // Log error but continue to fallback logic
-        console.warn(`Failed to fetch model config for ${body.model_id}, falling back to legacy logic:`, configError);
+
+        // Get API key for this provider
+        const provider = modelConfig.provider_id;
+        const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
+
+        if (!apiKey) {
+          return createErrorResponse(
+            `API key not configured for provider: ${provider}`,
+            'MISSING_API_KEY',
+            requestId,
+            500
+          );
+        }
+
+        // Generate using dynamic model config
+        console.log(`Using dynamic model config for ${modelConfig.display_name}`);
+        result = await generateWithModelConfig(
+          modelConfig,
+          body.prompt,
+          body.options || {},
+          apiKey
+        );
+      } else {
+        // Model config not found, fall back to default behavior
+        console.warn(`Model config not found for ${body.model_id}, falling back to hardcoded providers`);
+
+        const provider = body.model?.split(':')[0] || env.DEFAULT_PROVIDER || 'openai';
+        const model = body.model || getDefaultModel(provider);
+        const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
+
+        if (!apiKey) {
+          return createErrorResponse(
+            `API key not configured for provider: ${provider}`,
+            'MISSING_API_KEY',
+            requestId,
+            500
+          );
+        }
+
+        result = await generateText(provider, model, body.prompt, body.options || {}, apiKey);
       }
-    }
+    } else {
+      // No model_id provided - use legacy behavior with hardcoded providers
+      const provider = body.model?.split(':')[0] || env.DEFAULT_PROVIDER || 'openai';
+      const model = body.model || getDefaultModel(provider);
 
-    // LEGACY: Use existing hardcoded logic
-    // Determine provider and model
-    const modelParts = body.model?.split(':') || [];
-    const provider = modelParts.length > 1 ? modelParts[0] : (env.DEFAULT_PROVIDER || 'openai');
-    const model = modelParts.length > 1 ? modelParts[1] : (body.model || getDefaultModel(provider));
+      // Get API key
+      const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
+      if (!apiKey) {
+        return createErrorResponse(
+          `API key not configured for provider: ${provider}`,
+          'MISSING_API_KEY',
+          requestId,
+          500
+        );
+      }
 
-    // Get API key
-    const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
-    if (!apiKey) {
-      return createErrorResponse(
-        `API key not configured for provider: ${provider}`,
-        'MISSING_API_KEY',
-        requestId,
-        500
+      // Generate text using legacy provider-specific functions
+      result = await generateText(
+        provider,
+        model,
+        body.prompt,
+        body.options || {},
+        apiKey
       );
     }
-
-    // Generate text using provider
-    const result = await generateText(
-      provider,
-      model,
-      body.prompt,
-      body.options || {},
-      apiKey
-    );
 
     // Calculate generation time
     const generationTime = Date.now() - startTime;
@@ -271,93 +275,90 @@ async function handleGenerate(
 }
 
 /**
- * Fetch model configuration from Config Service
- */
-async function fetchModelConfig(modelId: string): Promise<ModelConfig | null> {
-  try {
-    const response = await fetch(
-      `https://api.distributedelectrons.com/model-config/${encodeURIComponent(modelId)}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.error(`Failed to fetch model config for ${modelId}: ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json() as any;
-    return data.data || null;
-  } catch (error) {
-    console.error(`Error fetching model config for ${modelId}:`, error);
-    return null;
-  }
-}
-
-/**
  * Generate text using dynamic model configuration
+ * This uses the payload mapper to support any provider
  */
-async function generateTextWithConfig(
+async function generateWithModelConfig(
   modelConfig: ModelConfig,
   prompt: string,
   options: any,
   apiKey: string
 ): Promise<TextResult> {
-  const { payload_mapping } = modelConfig;
+  const { payload_mapping, provider_id, model_id } = modelConfig;
+
+  // Validate payload mapping
+  if (!validatePayloadMapping(payload_mapping)) {
+    throw new Error('Invalid payload mapping in model config');
+  }
 
   // Prepare user inputs for payload mapping
-  const userInputs = {
+  const userInputs: Record<string, any> = {
     user_prompt: prompt,
-    prompt: prompt,
+    prompt: prompt, // Support both naming conventions
     max_tokens: options.max_tokens,
     temperature: options.temperature,
     top_p: options.top_p,
-    model: modelConfig.model_id,
-    ...options, // Include any other options
+    ...options,
   };
 
-  // Apply payload mapping to create provider-specific request
+  // Apply payload mapping to generate provider request
   const providerRequest = applyPayloadMapping(
     payload_mapping,
     userInputs,
     apiKey
   );
 
-  // Make the request to the provider
-  const response = await fetch(providerRequest.endpoint, {
+  // Build full URL
+  const baseUrl = getProviderBaseUrl(provider_id);
+  const fullUrl = `${baseUrl}${providerRequest.endpoint}`;
+
+  console.log(`Calling ${provider_id} at ${fullUrl}`);
+
+  // Make request to provider
+  const response = await fetch(fullUrl, {
     method: providerRequest.method,
     headers: providerRequest.headers,
     body: JSON.stringify(providerRequest.body),
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Provider API error (${response.status}): ${error}`);
+    const errorText = await response.text();
+    throw new Error(`Provider API error (${response.status}): ${errorText}`);
   }
 
-  const providerResponse = await response.json();
+  const responseData = await response.json();
 
-  // Apply response mapping to extract standardized fields
-  const mappedResponse = applyResponseMapping(
-    providerResponse,
-    payload_mapping.response_mapping
-  );
+  // Extract relevant fields using response mapping
+  const extracted = applyResponseMapping(responseData, payload_mapping.response_mapping);
 
   // Return standardized result
   return {
-    text: mappedResponse.text || '',
-    provider: modelConfig.provider_id,
-    model: mappedResponse.model || modelConfig.model_id,
-    tokens_used: mappedResponse.tokens_used || 0,
+    text: extracted.text || extracted.content || extracted.message || '',
+    provider: provider_id,
+    model: model_id,
+    tokens_used: extracted.tokens_used || extracted.usage_tokens || 0,
     metadata: {
+      ...extracted,
+      raw_response: responseData,
       config_id: modelConfig.config_id,
       display_name: modelConfig.display_name,
     },
   };
+}
+
+/**
+ * Get base URL for provider
+ */
+function getProviderBaseUrl(providerId: string): string {
+  const providerUrls: Record<string, string> = {
+    openai: 'https://api.openai.com',
+    anthropic: 'https://api.anthropic.com',
+    google: 'https://generativelanguage.googleapis.com',
+    cohere: 'https://api.cohere.ai',
+    // Add more providers as needed
+  };
+
+  return providerUrls[providerId.toLowerCase()] || `https://api.${providerId}.com`;
 }
 
 /**
@@ -509,6 +510,43 @@ async function getInstanceConfig(
       },
     },
   };
+}
+
+/**
+ * Fetch model configuration from Config Service
+ */
+async function fetchModelConfig(
+  modelId: string,
+  env: Env
+): Promise<ModelConfig | null> {
+  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+  const url = `${configServiceUrl}/model-config/${modelId}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to fetch model config for ${modelId}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json() as any;
+
+    // The config service returns { data: ModelConfig, request_id: string }
+    if (data && data.data) {
+      return data.data as ModelConfig;
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`Error fetching model config for ${modelId}:`, error);
+    return null;
+  }
 }
 
 /**

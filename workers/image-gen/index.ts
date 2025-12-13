@@ -3,7 +3,8 @@
  * Main worker that orchestrates image generation workflow
  */
 
-import { providerRegistry } from '../shared/provider-adapters';
+import { providerRegistry, DynamicAdapter } from '../shared/provider-adapters';
+import type { DynamicAdapterConfig } from '../shared/provider-adapters';
 import { checkAndRecordRequest } from '../shared/rate-limiter';
 import {
   uploadImage,
@@ -160,23 +161,21 @@ async function handleGenerate(
       );
     }
 
-    // Step 2: Determine model and provider
-    // Try to use dynamic model config if model_id is provided
-    const modelId = body.model_id || 'ideogram-v2'; // Default to ideogram-v2
+    // Step 2: Determine model_id and fetch configuration
+    // Support both 'model' and 'model_id' parameters for backwards compatibility
+    const modelId = body.model_id || body.model || getDefaultModelId(env);
     let modelConfig: ModelConfig | null = null;
     let useModelConfig = false;
 
     // Attempt to fetch model config
-    if (body.model_id || modelId === 'ideogram-v2') {
-      console.log(`Attempting to fetch model config for: ${modelId}`);
-      modelConfig = await fetchModelConfig(modelId, env);
+    console.log(`Attempting to fetch model config for: ${modelId}`);
+    modelConfig = await fetchModelConfig(modelId, env);
 
-      if (modelConfig) {
-        console.log(`Using dynamic model config for: ${modelConfig.model_id}`);
-        useModelConfig = true;
-      } else {
-        console.log(`Model config fetch failed, falling back to legacy adapter`);
-      }
+    if (modelConfig) {
+      console.log(`Using dynamic model config for: ${modelConfig.model_id}`);
+      useModelConfig = true;
+    } else {
+      console.log(`Model config fetch failed, falling back to legacy adapter`);
     }
 
     // Determine provider (from model config or default)
@@ -209,7 +208,7 @@ async function handleGenerate(
       }
     }
 
-    // Get API key
+    // Step 4: Get API key for provider
     const apiKey = instanceConfig.api_keys[provider];
     if (!apiKey) {
       return createErrorResponse(
@@ -220,7 +219,7 @@ async function handleGenerate(
       );
     }
 
-    // Step 4-8: Generate image (using model config or fallback to legacy adapter)
+    // Step 5-8: Generate image (using model config or fallback to legacy adapter)
     let imageData: ArrayBuffer;
     let imageMetadata: any;
 
@@ -239,7 +238,7 @@ async function handleGenerate(
       // Fallback to legacy provider adapter system
       console.log('Generating image with legacy provider adapter');
 
-      // Step 4: Get provider adapter
+      // Get provider adapter
       const adapter = providerRegistry.getAdapter(provider);
 
       // Step 5: Format request for provider
@@ -352,6 +351,48 @@ async function handleGenerate(
 }
 
 /**
+ * Fetch model configuration from config service
+ */
+async function getModelConfig(modelId: string, env: Env): Promise<any> {
+  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+
+  try {
+    console.log(`Fetching model config for ${modelId} from ${configServiceUrl}`);
+
+    const response = await fetch(`${configServiceUrl}/model-config/${modelId}`, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.log(`Model config not found for ${modelId} - will use legacy mode`);
+      } else {
+        console.error(`Failed to fetch model config for ${modelId}:`, response.status, response.statusText);
+      }
+      return null;
+    }
+
+    const result = await response.json();
+    console.log(`Successfully fetched model config for ${modelId}`);
+
+    // The config service returns data in a wrapper object
+    return result.data || result;
+  } catch (error) {
+    console.error(`Error fetching model config for ${modelId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Get default model ID for the instance
+ */
+function getDefaultModelId(env: Env): string {
+  return env.DEFAULT_MODEL_ID || 'ideogram-v2';
+}
+
+/**
  * Get instance configuration
  * Note: This is a mock implementation. In production, this would call
  * Team 1's Config Service to get the real configuration from D1.
@@ -364,10 +405,12 @@ async function getInstanceConfig(
   // In production, this would query Team 1's Config Service
   return {
     instance_id: instanceId,
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     api_keys: {
       // These would come from D1 database in production
       ideogram: env.IDEOGRAM_API_KEY || 'ide_mock_key',
+      gemini: env.GEMINI_API_KEY || '',
+      openai: env.OPENAI_API_KEY || '',
     },
     rate_limits: {
       ideogram: {

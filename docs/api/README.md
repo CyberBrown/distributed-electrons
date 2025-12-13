@@ -35,7 +35,7 @@ curl -X GET https://config-service.production.workers.dev/instance/production \
 ```json
 {
   "instance_id": "production",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "name": "Production Instance",
   "api_keys": {
     "ideogram": "ide_***xxx"
@@ -75,7 +75,7 @@ curl -X POST https://config-service.production.workers.dev/instance \
   -H "Content-Type: application/json" \
   -d '{
     "instance_id": "staging",
-    "org_id": "solamp",
+    "org_id": "your-org-id",
     "name": "Staging Instance",
     "api_keys": {
       "ideogram": "ide_staging_key"
@@ -94,7 +94,7 @@ curl -X POST https://config-service.production.workers.dev/instance \
 ```json
 {
   "instance_id": "staging",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "name": "Staging Instance",
   "created_at": "2025-11-20T12:30:00Z",
   "worker_urls": {
@@ -149,7 +149,7 @@ Retrieve user details and permissions.
   "user_id": "user_123",
   "email": "developer@example.com",
   "role": "user",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "instances": ["production", "development"],
   "created_at": "2025-01-15T00:00:00Z"
 }
@@ -168,7 +168,7 @@ Create a new user.
 {
   "email": "newdev@example.com",
   "role": "user",
-  "org_id": "solamp",
+  "org_id": "your-org-id",
   "instances": ["development"]
 }
 ```
