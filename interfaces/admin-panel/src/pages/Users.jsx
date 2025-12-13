@@ -208,7 +208,7 @@ function CreateUserModal({ onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     email: '',
     role: 'user',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     instances: []
   })
   const [submitting, setSubmitting] = useState(false)

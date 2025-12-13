@@ -9,7 +9,7 @@
 -- Creates 1 test organization
 -- ============================================================================
 INSERT INTO organizations (org_id, name, billing_email, created_at) VALUES
-('org_550e8400-e29b-41d4-a716-446655440000', 'Solamp Inc.', 'billing@solamp.com', CURRENT_TIMESTAMP);
+('org_550e8400-e29b-41d4-a716-446655440000', 'Acme Corp.', 'billing@example.com', CURRENT_TIMESTAMP);
 
 -- ============================================================================
 -- SEED: instances
@@ -38,10 +38,10 @@ INSERT INTO instances (instance_id, org_id, name, config, created_at) VALUES
             }
         },
         "worker_urls": {
-            "config_service": "https://config-prod.solamp.workers.dev",
-            "image_generation": "https://images-prod.solamp.workers.dev"
+            "config_service": "https://config-prod.your-subdomain.workers.dev",
+            "image_generation": "https://images-prod.your-subdomain.workers.dev"
         },
-        "r2_bucket": "solamp-prod-assets",
+        "r2_bucket": "your-prod-assets",
         "authorized_users": []
     }'),
     CURRENT_TIMESTAMP
@@ -68,10 +68,10 @@ INSERT INTO instances (instance_id, org_id, name, config, created_at) VALUES
             }
         },
         "worker_urls": {
-            "config_service": "https://config-dev.solamp.workers.dev",
-            "image_generation": "https://images-dev.solamp.workers.dev"
+            "config_service": "https://config-dev.your-subdomain.workers.dev",
+            "image_generation": "https://images-dev.your-subdomain.workers.dev"
         },
-        "r2_bucket": "solamp-dev-assets",
+        "r2_bucket": "your-dev-assets",
         "authorized_users": []
     }'),
     CURRENT_TIMESTAMP
@@ -82,8 +82,8 @@ INSERT INTO instances (instance_id, org_id, name, config, created_at) VALUES
 -- Creates 2 users: admin and regular user
 -- ============================================================================
 INSERT INTO users (user_id, email, role, org_id, created_at) VALUES
-('user_650e8400-e29b-41d4-a716-446655440001', 'admin@solamp.com', 'admin', 'org_550e8400-e29b-41d4-a716-446655440000', CURRENT_TIMESTAMP),
-('user_650e8400-e29b-41d4-a716-446655440002', 'developer@solamp.com', 'user', 'org_550e8400-e29b-41d4-a716-446655440000', CURRENT_TIMESTAMP);
+('user_650e8400-e29b-41d4-a716-446655440001', 'admin@example.com', 'admin', 'org_550e8400-e29b-41d4-a716-446655440000', CURRENT_TIMESTAMP),
+('user_650e8400-e29b-41d4-a716-446655440002', 'developer@example.com', 'user', 'org_550e8400-e29b-41d4-a716-446655440000', CURRENT_TIMESTAMP);
 
 -- ============================================================================
 -- SEED: user_instance_access
@@ -182,7 +182,7 @@ INSERT INTO usage_logs (log_id, instance_id, timestamp, provider, tokens_used, c
 -- ============================================================================
 -- SEED DATA SUMMARY
 -- ============================================================================
--- Organizations: 1 (Solamp Inc.)
+-- Organizations: 1 (Acme Corp.)
 -- Instances: 2 (production, development)
 -- Users: 2 (admin, developer)
 -- User Access: Admin has access to both instances, developer only to dev

@@ -1,12 +1,12 @@
 // API Service with Mock Data Support
 
-const USE_MOCK = true // Toggle for parallel development
+const USE_MOCK = false // Toggle for parallel development
 
 // Mock Data
 const mockInstances = [
   {
     instance_id: 'production',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     name: 'Production Instance',
     status: 'active',
     api_keys: {
@@ -28,7 +28,7 @@ const mockInstances = [
   },
   {
     instance_id: 'development',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     name: 'Development Instance',
     status: 'active',
     api_keys: {
@@ -51,7 +51,7 @@ const mockUsers = [
     user_id: 'user_123',
     email: 'admin@example.com',
     role: 'admin',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     instances: ['production', 'development'],
     created_at: '2025-01-01T00:00:00Z'
   },
@@ -59,7 +59,7 @@ const mockUsers = [
     user_id: 'user_456',
     email: 'developer@example.com',
     role: 'user',
-    org_id: 'solamp',
+    org_id: 'your-org-id',
     instances: ['production'],
     created_at: '2025-01-05T00:00:00Z'
   }
@@ -180,7 +180,7 @@ const delay = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms))
 // API Service
 class ApiService {
   constructor() {
-    this.baseUrl = 'https://api.distributedelectrons.com'
+    this.baseUrl = 'https://config-service.your-subdomain.workers.dev'
   }
 
   getAuthHeader() {
@@ -456,7 +456,7 @@ class ApiService {
     return await response.json()
   }
 
-  // Provider API Key Management
+  // Provider API Key Management (using KV storage)
   async updateProviderApiKey(instanceId, providerId, apiKey) {
     if (USE_MOCK) {
       await delay(300)
@@ -477,12 +477,70 @@ class ApiService {
       }
     }
 
-    // Use existing updateInstance endpoint
-    return this.updateInstance(instanceId, {
-      api_keys: {
-        [providerId]: apiKey
-      }
+    // Use new provider-key endpoint (stores in KV with encryption)
+    const response = await fetch(`${this.baseUrl}/provider-key`, {
+      method: 'POST',
+      headers: this.getAuthHeader(),
+      body: JSON.stringify({
+        instance_id: instanceId,
+        provider: providerId,
+        api_key: apiKey
+      })
     })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to store provider API key')
+    }
+
+    const result = await response.json()
+    return {
+      success: true,
+      message: `${providerId} API key stored successfully`,
+      ...result.data
+    }
+  }
+
+  async getProviderKeyStatus(instanceId, providerId) {
+    if (USE_MOCK) {
+      await delay(200)
+      const instance = mockInstances.find(i => i.instance_id === instanceId)
+      return {
+        instance_id: instanceId,
+        provider: providerId,
+        configured: !!(instance?.api_keys?.[providerId]),
+        updated_at: new Date().toISOString()
+      }
+    }
+
+    const response = await fetch(`${this.baseUrl}/provider-key/${instanceId}/${providerId}`, {
+      headers: this.getAuthHeader()
+    })
+
+    if (!response.ok) throw new Error('Failed to check provider key status')
+    const result = await response.json()
+    return result.data
+  }
+
+  async listProviderKeys(instanceId) {
+    if (USE_MOCK) {
+      await delay(200)
+      const instance = mockInstances.find(i => i.instance_id === instanceId)
+      const providers = Object.keys(instance?.api_keys || {}).map(p => ({
+        provider: p,
+        configured: true,
+        updated_at: new Date().toISOString()
+      }))
+      return { instance_id: instanceId, providers }
+    }
+
+    const response = await fetch(`${this.baseUrl}/provider-key/${instanceId}`, {
+      headers: this.getAuthHeader()
+    })
+
+    if (!response.ok) throw new Error('Failed to list provider keys')
+    const result = await response.json()
+    return result.data
   }
 
   async deleteProviderApiKey(instanceId, providerId) {
@@ -503,12 +561,13 @@ class ApiService {
       }
     }
 
-    // In real implementation, this would be a PATCH that removes the key
-    return this.updateInstance(instanceId, {
-      api_keys: {
-        [providerId]: null
-      }
+    const response = await fetch(`${this.baseUrl}/provider-key/${instanceId}/${providerId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeader()
     })
+
+    if (!response.ok) throw new Error('Failed to delete provider API key')
+    return await response.json()
   }
 
   async testProviderApiKey(providerId, apiKey) {
@@ -524,10 +583,21 @@ class ApiService {
       }
     }
 
-    // Simulate success for demo
+    // Provider-specific validation
+    const validations = {
+      openai: apiKey.startsWith('sk-'),
+      anthropic: apiKey.startsWith('sk-ant-'),
+      google: apiKey.startsWith('AIza'),
+      ideogram: apiKey.startsWith('ide_') || apiKey.length > 20,
+    }
+
+    const isValid = validations[providerId] ?? true
+
     return {
-      success: true,
-      message: `${providerId} API key format is valid`
+      success: isValid,
+      message: isValid
+        ? `${providerId} API key format is valid`
+        : `${providerId} API key format appears invalid`
     }
   }
 
@@ -557,7 +627,8 @@ class ApiService {
     })
 
     if (!response.ok) throw new Error('Failed to fetch model configs')
-    return await response.json()
+    const result = await response.json()
+    return result.data || result
   }
 
   async getModelConfig(configId) {
@@ -573,7 +644,8 @@ class ApiService {
     })
 
     if (!response.ok) throw new Error('Failed to fetch model config')
-    return await response.json()
+    const result = await response.json()
+    return result.data || result
   }
 
   async createModelConfig(data) {
@@ -600,7 +672,8 @@ class ApiService {
       const error = await response.json()
       throw new Error(error.error || 'Failed to create model config')
     }
-    return await response.json()
+    const result = await response.json()
+    return result.data || result
   }
 
   async updateModelConfig(configId, data) {
@@ -628,7 +701,8 @@ class ApiService {
       const error = await response.json()
       throw new Error(error.error || 'Failed to update model config')
     }
-    return await response.json()
+    const result = await response.json()
+    return result.data || result
   }
 
   async deleteModelConfig(configId) {

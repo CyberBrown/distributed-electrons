@@ -43,6 +43,22 @@ import {
   deleteModelConfig,
 } from './handlers/model-config-handlers';
 
+// Provider Key handlers
+import {
+  storeProviderKey,
+  getProviderKeyStatus,
+  deleteProviderKey,
+  listProviderKeys,
+} from './handlers/provider-key-handlers';
+
+// Dev Credentials handlers
+import {
+  storeDevCredential,
+  getDevCredential,
+  deleteDevCredential,
+  listDevCredentials,
+} from './handlers/dev-credentials-handlers';
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -190,6 +206,65 @@ export default {
             return addCorsHeaders(response, corsHeaders);
           } else if (method === 'DELETE') {
             const response = await deleteModelConfig(id, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        }
+      }
+
+      // Provider Key routes
+      if (pathParts[0] === 'provider-key') {
+        if (pathParts.length === 1) {
+          // POST /provider-key
+          if (method === 'POST') {
+            const response = await storeProviderKey(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 2) {
+          const instanceId = pathParts[1];
+          // GET /provider-key/{instance_id} - list all providers
+          if (method === 'GET') {
+            const response = await listProviderKeys(instanceId, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 3) {
+          const instanceId = pathParts[1];
+          const provider = pathParts[2];
+          // GET /provider-key/{instance_id}/{provider} - check status
+          if (method === 'GET') {
+            const response = await getProviderKeyStatus(instanceId, provider, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+          // DELETE /provider-key/{instance_id}/{provider}
+          if (method === 'DELETE') {
+            const response = await deleteProviderKey(instanceId, provider, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        }
+      }
+
+      // Dev Credentials routes
+      if (pathParts[0] === 'dev-credentials') {
+        if (pathParts.length === 1) {
+          // GET /dev-credentials - list all credentials
+          if (method === 'GET') {
+            const response = await listDevCredentials(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+          // POST /dev-credentials - store credential
+          if (method === 'POST') {
+            const response = await storeDevCredential(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 2) {
+          const credentialType = pathParts[1];
+          // GET /dev-credentials/{type} - get credential value
+          if (method === 'GET') {
+            const response = await getDevCredential(credentialType, request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+          // DELETE /dev-credentials/{type} - delete credential
+          if (method === 'DELETE') {
+            const response = await deleteDevCredential(credentialType, request, env);
             return addCorsHeaders(response, corsHeaders);
           }
         }

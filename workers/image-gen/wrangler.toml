@@ -33,11 +33,14 @@ script_name = "rate-limiter"
 # Environment Variables
 [vars]
 DEFAULT_PROVIDER = "ideogram"
-CDN_URL = "https://cdn.example.com"
+DEFAULT_MODEL_ID = "ideogram-v2"
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
+CDN_URL = "https://images.distributedelectrons.com"
 
 # Secrets (set with: wrangler secret put <NAME>)
 # - IDEOGRAM_API_KEY
+# - GEMINI_API_KEY
+# - OPENAI_API_KEY
 
 # Custom routes
 routes = [

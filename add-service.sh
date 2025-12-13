@@ -7,11 +7,24 @@
 
 set -e
 
-# Configuration
-DOMAIN="distributedelectrons.com"
-ZONE_ID="417d6062ae2113dc20c4910e9f6f691f"
-ACCOUNT_ID="52b1c60ff2a24fb21c1ef9a429e63261"
+# Configuration - Set these environment variables before running
+DOMAIN="${CLOUDFLARE_DOMAIN:-your-domain.com}"
+ZONE_ID="${CLOUDFLARE_ZONE_ID:-}"
+ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+
+# Check required environment variables
+if [ -z "$ZONE_ID" ]; then
+  echo -e "${RED}Error: CLOUDFLARE_ZONE_ID environment variable not set${NC}"
+  echo "Set it with: export CLOUDFLARE_ZONE_ID='your-zone-id'"
+  exit 1
+fi
+
+if [ -z "$ACCOUNT_ID" ]; then
+  echo -e "${RED}Error: CLOUDFLARE_ACCOUNT_ID environment variable not set${NC}"
+  echo "Set it with: export CLOUDFLARE_ACCOUNT_ID='your-account-id'"
+  exit 1
+fi
 
 # Colors for output
 RED='\033[0;31m'

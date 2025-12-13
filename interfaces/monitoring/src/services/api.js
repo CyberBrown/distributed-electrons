@@ -130,7 +130,7 @@ const generateMockMetrics = (instance, timeRange) => {
 // API Service
 class MonitoringApiService {
   constructor() {
-    this.baseUrl = 'https://api.distributedelectrons.com'
+    this.baseUrl = 'https://api.your-domain.com'
   }
 
   getAuthHeader() {

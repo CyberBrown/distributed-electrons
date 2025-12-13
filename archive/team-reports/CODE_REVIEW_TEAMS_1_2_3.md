@@ -506,7 +506,7 @@ Team 4 provided a deployment guide (`/workspace/interfaces/DEPLOYMENT.md`) that 
 // Admin Panel expects this response from GET /instance/production
 {
   instance_id: 'production',
-  org_id: 'solamp',
+  org_id: 'your-org-id',
   name: 'Production Instance',
   api_keys: { ideogram: 'ide_***' },        // Separate field
   rate_limits: { ideogram: { rpm: 500 } },  // Separate field
@@ -520,7 +520,7 @@ Team 4 provided a deployment guide (`/workspace/interfaces/DEPLOYMENT.md`) that 
 ```javascript
 {
   instance_id: 'production',
-  org_id: 'solamp',
+  org_id: 'your-org-id',
   name: 'Production Instance',
   config: '{"api_keys": {...}, "rate_limits": {...}}', // Single JSON string
   created_at: '2025-01-15T10:00:00Z'

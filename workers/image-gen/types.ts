@@ -4,13 +4,15 @@
 
 export interface GenerateRequest {
   prompt: string;
-  model?: string;
-  model_id?: string; // New: Config Service model_id (e.g., "ideogram-v2")
+  model?: string; // Legacy: will be treated as model_id
+  model_id?: string; // Preferred: explicit model config ID (e.g., "ideogram-v2")
   instance_id?: string;
   project_id?: string;
   options?: {
     aspect_ratio?: string;
     style?: string;
+    quality?: string;
+    num_images?: number;
     [key: string]: any;
   };
 }
@@ -48,8 +50,13 @@ export interface Env {
   CDN_URL?: string;
   DEFAULT_INSTANCE_ID?: string;
   DEFAULT_PROVIDER?: string;
+  DEFAULT_MODEL_ID?: string;
   CONFIG_SERVICE_URL?: string; // URL for Config Service API
-  IDEOGRAM_API_KEY?: string; // Fallback API key
+
+  // Legacy API keys (fallback when config service unavailable)
+  IDEOGRAM_API_KEY?: string;
+  GEMINI_API_KEY?: string;
+  OPENAI_API_KEY?: string;
 }
 
 export interface InstanceConfig {
