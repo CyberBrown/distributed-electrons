@@ -59,6 +59,19 @@ import {
   listDevCredentials,
 } from './handlers/dev-credentials-handlers';
 
+// Activity handlers
+import {
+  getActivityFeed,
+  markActivityRead,
+  getEventsForEntity,
+  getEventStats,
+  trackEvent,
+  listEventSubscriptions,
+  createEventSubscription,
+  updateEventSubscription,
+  deleteEventSubscription,
+} from './handlers/activity-handlers';
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -265,6 +278,71 @@ export default {
           // DELETE /dev-credentials/{type} - delete credential
           if (method === 'DELETE') {
             const response = await deleteDevCredential(credentialType, request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        }
+      }
+
+      // Activity Feed routes
+      if (pathParts[0] === 'activity') {
+        if (pathParts.length === 1) {
+          // GET /activity - get activity feed
+          if (method === 'GET') {
+            const response = await getActivityFeed(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 2 && pathParts[1] === 'read') {
+          // POST /activity/read - mark items as read
+          if (method === 'POST') {
+            const response = await markActivityRead(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        }
+      }
+
+      // Events routes
+      if (pathParts[0] === 'events') {
+        if (pathParts.length === 1) {
+          // POST /events - track new event
+          if (method === 'POST') {
+            const response = await trackEvent(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 2 && pathParts[1] === 'stats') {
+          // GET /events/stats - get event statistics
+          if (method === 'GET') {
+            const response = await getEventStats(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 2 && pathParts[1] === 'subscriptions') {
+          // GET /events/subscriptions - list subscriptions
+          if (method === 'GET') {
+            const response = await listEventSubscriptions(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+          // POST /events/subscriptions - create subscription
+          if (method === 'POST') {
+            const response = await createEventSubscription(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 3 && pathParts[1] === 'subscriptions') {
+          const subscriptionId = pathParts[2];
+          // PUT /events/subscriptions/{id} - update subscription
+          if (method === 'PUT') {
+            const response = await updateEventSubscription(subscriptionId, request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+          // DELETE /events/subscriptions/{id} - delete subscription
+          if (method === 'DELETE') {
+            const response = await deleteEventSubscription(subscriptionId, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 3) {
+          // GET /events/{eventable_type}/{eventable_id} - get events for entity
+          const eventableType = pathParts[1];
+          const eventableId = pathParts[2];
+          if (method === 'GET') {
+            const response = await getEventsForEntity(eventableType, eventableId, request, env);
             return addCorsHeaders(response, corsHeaders);
           }
         }

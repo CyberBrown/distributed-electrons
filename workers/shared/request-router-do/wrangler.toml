@@ -1,0 +1,19 @@
+# Request Router Durable Object Worker Configuration
+
+name = "request-router"
+main = "router.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Worker settings
+workers_dev = true
+
+# Durable Object bindings
+[[durable_objects.bindings]]
+name = "REQUEST_ROUTER"
+class_name = "RequestRouter"
+
+# Migrations for Durable Objects
+[[migrations]]
+tag = "v1"
+new_classes = ["RequestRouter"]
