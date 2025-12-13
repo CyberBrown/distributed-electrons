@@ -1,9 +1,13 @@
 // Testing GUI Application Logic
 
+// API Configuration
+const CONFIG_SERVICE_URL = 'https://api.distributedelectrons.com';
+
 // State
 const state = {
     useMockApi: true,
-    isGenerating: false
+    isGenerating: false,
+    modelsLoaded: false
 };
 
 // DOM Elements
@@ -38,170 +42,17 @@ const elements = {
     useMockApi: document.getElementById('useMockApi')
 };
 
-// State for model configs
-const modelConfigs = {
-    configs: [],
-    loading: false
-};
-
 // Initialize
 function init() {
     setupEventListeners();
     loadSavedSettings();
-    loadAvailableModels(); // Load models on init
-}
-
-// Load available models from config service
-async function loadAvailableModels() {
-    const configServiceUrl = 'https://config-service.your-subdomain.workers.dev';
-    modelConfigs.loading = true;
-
-    try {
-        const response = await fetch(`${configServiceUrl}/model-config`, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            console.error('Failed to fetch model configs');
-            return;
-        }
-
-        const result = await response.json();
-        modelConfigs.configs = result.data?.configs || result.configs || [];
-
-        populateModelDropdown();
-    } catch (error) {
-        console.error('Error loading model configs:', error);
-        // Use fallback static models if config service unavailable
-        useFallbackModels();
-    } finally {
-        modelConfigs.loading = false;
-    }
-}
-
-// Populate model dropdown with loaded configs
-function populateModelDropdown() {
-    const modelSelect = elements.model;
-
-    if (modelConfigs.configs.length === 0) {
-        return; // Keep existing static options
-    }
-
-    // Clear existing options
-    modelSelect.innerHTML = '<option value="">Auto (Default)</option>';
-
-    // Group by provider
-    const byProvider = modelConfigs.configs.reduce((acc, config) => {
-        if (!acc[config.provider_id]) acc[config.provider_id] = [];
-        acc[config.provider_id].push(config);
-        return acc;
-    }, {});
-
-    // Create optgroups by provider
-    for (const [provider, configs] of Object.entries(byProvider)) {
-        const optgroup = document.createElement('optgroup');
-        optgroup.label = provider.toUpperCase();
-
-        configs
-            .filter(c => c.status === 'active' || c.status === 'beta')
-            .forEach(config => {
-                const option = document.createElement('option');
-                option.value = config.model_id;
-                option.textContent = `${config.display_name}${config.status === 'beta' ? ' (Beta)' : ''}`;
-                option.dataset.capabilities = JSON.stringify(config.capabilities);
-                option.dataset.pricing = config.pricing ? JSON.stringify(config.pricing) : '{}';
-                optgroup.appendChild(option);
-            });
-
-        modelSelect.appendChild(optgroup);
-    }
-}
-
-// Fallback to static models if config service unavailable
-function useFallbackModels() {
-    console.log('Using fallback static model list');
-    // Keep existing static options in HTML
-}
-
-// Handle model selection change
-function onModelChange() {
-    const selectedOption = elements.model.options[elements.model.selectedIndex];
-
-    if (!selectedOption || !selectedOption.value) {
-        // Auto/default selected - reset to defaults
-        return;
-    }
-
-    // Get model capabilities from dataset
-    const capabilitiesStr = selectedOption.dataset.capabilities;
-    const pricingStr = selectedOption.dataset.pricing;
-
-    if (!capabilitiesStr) {
-        return; // Legacy static option
-    }
-
-    try {
-        const capabilities = JSON.parse(capabilitiesStr);
-        const pricing = pricingStr ? JSON.parse(pricingStr) : null;
-
-        // Update UI based on capabilities
-        updateOptionsForCapabilities(capabilities);
-
-        // Show pricing info if available
-        if (pricing) {
-            showPricingInfo(pricing);
-        }
-
-        console.log(`Selected model capabilities:`, capabilities);
-    } catch (error) {
-        console.error('Error parsing model metadata:', error);
-    }
-}
-
-// Update UI options based on model capabilities
-function updateOptionsForCapabilities(capabilities) {
-    // For now, this is a placeholder for future enhancements
-    // In the future, we could:
-    // - Show/hide video-specific options if capabilities.video
-    // - Show/hide inpainting options if capabilities.inpainting
-    // - Adjust aspect ratio options based on model support
-    // - Show warnings if user's selections aren't supported
-
-    // Example: Log capabilities for debugging
-    if (capabilities.video && !capabilities.image) {
-        console.log('Video-only model selected');
-    }
-
-    if (capabilities.image && !capabilities.video) {
-        console.log('Image-only model selected');
-    }
-
-    if (capabilities.text) {
-        console.log('Text generation model selected (not applicable for image gen)');
-    }
-}
-
-// Show pricing information for selected model
-function showPricingInfo(pricing) {
-    // For now, just log it. Could enhance to show in UI
-    if (pricing.cost_per_image) {
-        console.log(`Pricing: $${pricing.cost_per_image} per image`);
-    } else if (pricing.cost_per_video) {
-        console.log(`Pricing: $${pricing.cost_per_video} per video`);
-    } else if (pricing.cost_per_1k_tokens) {
-        console.log(`Pricing: $${pricing.cost_per_1k_tokens} per 1K tokens`);
-    }
+    loadModelsFromConfigService();
 }
 
 // Setup Event Listeners
 function setupEventListeners() {
     // Form submission
     elements.form.addEventListener('submit', handleSubmit);
-
-    // Model selection change
-    elements.model.addEventListener('change', onModelChange);
 
     // API Key toggle
     elements.toggleApiKey.addEventListener('click', toggleApiKeyVisibility);
@@ -238,6 +89,72 @@ function loadSavedSettings() {
     if (savedInstanceId) {
         elements.instanceId.value = savedInstanceId;
     }
+}
+
+// Load models from Config Service
+async function loadModelsFromConfigService() {
+    try {
+        const response = await fetch(`${CONFIG_SERVICE_URL}/model-config?type=image`);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch models: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.models && Array.isArray(data.models) && data.models.length > 0) {
+            populateModelDropdown(data.models);
+            state.modelsLoaded = true;
+            console.log('Successfully loaded models from Config Service:', data.models.length);
+        } else {
+            throw new Error('No models returned from Config Service');
+        }
+    } catch (error) {
+        console.warn('Failed to load models from Config Service, using hardcoded defaults:', error);
+        populateDefaultModels();
+    }
+}
+
+// Populate model dropdown with dynamic data
+function populateModelDropdown(models) {
+    // Clear existing options
+    elements.model.innerHTML = '';
+
+    // Add "Default" option first
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Default';
+    elements.model.appendChild(defaultOption);
+
+    // Add models from Config Service
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.model_id;
+
+        // Format display name with provider
+        const displayName = model.display_name || model.model_id;
+        const provider = model.provider ? ` (${model.provider})` : '';
+        option.textContent = `${displayName}${provider}`;
+
+        // Store metadata as data attributes
+        if (model.provider) {
+            option.dataset.provider = model.provider;
+        }
+        if (model.capabilities) {
+            option.dataset.capabilities = JSON.stringify(model.capabilities);
+        }
+
+        elements.model.appendChild(option);
+    });
+}
+
+// Populate with hardcoded default models (fallback)
+function populateDefaultModels() {
+    elements.model.innerHTML = `
+        <option value="">Default</option>
+        <option value="ideogram-v2">Ideogram V2</option>
+        <option value="ideogram-v1">Ideogram V1</option>
+    `;
 }
 
 // Save settings to localStorage
@@ -342,7 +259,7 @@ async function generateImage(formData) {
 
 // Generate Image - Real API
 async function generateImageReal(formData) {
-    const baseUrl = `https://image-gen.your-subdomain.workers.dev`;
+    const baseUrl = `https://images.distributedelectrons.com`;
 
     const response = await fetch(`${baseUrl}/generate`, {
         method: 'POST',

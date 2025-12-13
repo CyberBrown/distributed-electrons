@@ -3,21 +3,26 @@
  * Main worker that orchestrates image generation workflow
  */
 
-import { providerRegistry, DynamicAdapter } from '../shared/provider-adapters';
-import type { DynamicAdapterConfig } from '../shared/provider-adapters';
+import { providerRegistry } from '../shared/provider-adapters';
 import { checkAndRecordRequest } from '../shared/rate-limiter';
 import {
   uploadImage,
   generateMetadata as createImageMetadata,
   serializeMetadata,
 } from '../shared/r2-manager';
-import { applyPayloadMapping } from '../shared/utils/payload-mapper';
+import {
+  applyPayloadMapping,
+  applyResponseMapping,
+  validatePayloadMapping,
+  type PayloadMapping,
+} from '../shared/utils/payload-mapper';
 import type {
   Env,
   GenerateRequest,
   GenerateResponse,
   ErrorResponse,
   InstanceConfig,
+  ModelConfig,
 } from './types';
 
 export default {
@@ -155,42 +160,39 @@ async function handleGenerate(
       );
     }
 
-    // Step 2: Determine model_id and fetch configuration
-    // Support both 'model' and 'model_id' parameters for backwards compatibility
-    const modelId = body.model_id || body.model || getDefaultModelId(env);
-    const modelConfig = await getModelConfig(modelId, env);
-
-    // Fallback to legacy provider-based approach if model config not found
-    let provider: string;
+    // Step 2: Determine model and provider
+    // Try to use dynamic model config if model_id is provided
+    const modelId = body.model_id || 'ideogram-v2'; // Default to ideogram-v2
+    let modelConfig: ModelConfig | null = null;
     let useModelConfig = false;
-    let adapter: any;
 
-    if (modelConfig) {
-      provider = modelConfig.provider_id;
-      useModelConfig = true;
-      console.log(`Using model config for ${modelId} (provider: ${provider})`);
+    // Attempt to fetch model config
+    if (body.model_id || modelId === 'ideogram-v2') {
+      console.log(`Attempting to fetch model config for: ${modelId}`);
+      modelConfig = await fetchModelConfig(modelId, env);
 
-      // Create dynamic adapter with model config
-      const adapterConfig: DynamicAdapterConfig = {
-        provider_id: modelConfig.provider_id,
-        model_id: modelConfig.model_id,
-        payload_mapping: modelConfig.payload_mapping,
-      };
-      adapter = new DynamicAdapter(adapterConfig);
-    } else {
-      provider = env.DEFAULT_PROVIDER || 'ideogram';
-      console.warn(`Model config not found for ${modelId}, falling back to legacy mode with provider: ${provider}`);
-      adapter = providerRegistry.getAdapter(provider);
+      if (modelConfig) {
+        console.log(`Using dynamic model config for: ${modelConfig.model_id}`);
+        useModelConfig = true;
+      } else {
+        console.log(`Model config fetch failed, falling back to legacy adapter`);
+      }
     }
 
+    // Determine provider (from model config or default)
+    const provider = modelConfig?.provider_id || env.DEFAULT_PROVIDER || 'ideogram';
+
     // Step 3: Check rate limits
-    const rateLimitConfig = instanceConfig.rate_limits[provider];
+    const rateLimitConfig = modelConfig?.rate_limits || instanceConfig.rate_limits[provider];
     if (rateLimitConfig && env.RATE_LIMITER) {
       const rateLimitResult = await checkAndRecordRequest(
         { RATE_LIMITER: env.RATE_LIMITER },
         instanceId,
         provider,
-        rateLimitConfig
+        {
+          rpm: rateLimitConfig.rpm,
+          tpm: rateLimitConfig.tpm,
+        }
       );
 
       if (!rateLimitResult.allowed) {
@@ -207,7 +209,7 @@ async function handleGenerate(
       }
     }
 
-    // Step 4: Get API key for provider
+    // Get API key
     const apiKey = instanceConfig.api_keys[provider];
     if (!apiKey) {
       return createErrorResponse(
@@ -218,60 +220,63 @@ async function handleGenerate(
       );
     }
 
-    // Step 5: Format request for provider
-    let providerRequest: any;
+    // Step 4-8: Generate image (using model config or fallback to legacy adapter)
+    let imageData: ArrayBuffer;
+    let imageMetadata: any;
 
     if (useModelConfig && modelConfig) {
-      // Use model config payload mapping
-      console.log('Applying payload mapping from model config');
-      const mappedRequest = applyPayloadMapping(
-        modelConfig.payload_mapping,
-        {
-          user_prompt: body.prompt,
-          aspect_ratio: body.options?.aspect_ratio,
-          style: body.options?.style,
-          quality: body.options?.quality,
-          num_images: body.options?.num_images || 1,
-          ...body.options, // Include any additional options
-        },
+      // Use dynamic model config system
+      console.log('Generating image with dynamic model config');
+      const result = await generateWithModelConfig(
+        modelConfig,
+        body.prompt,
+        body.options || {},
         apiKey
       );
-
-      // Wrap in ProviderRequest format for DynamicAdapter
-      providerRequest = {
-        provider: provider,
-        payload: mappedRequest,
-      };
+      imageData = result.imageData;
+      imageMetadata = result.metadata;
     } else {
-      // Legacy: use adapter formatRequest
-      console.log('Using legacy adapter formatRequest');
-      providerRequest = adapter.formatRequest(body.prompt, body.options || {});
+      // Fallback to legacy provider adapter system
+      console.log('Generating image with legacy provider adapter');
+
+      // Step 4: Get provider adapter
+      const adapter = providerRegistry.getAdapter(provider);
+
+      // Step 5: Format request for provider
+      const providerRequest = adapter.formatRequest(body.prompt, body.options || {});
+
+      // Step 6: Submit job to provider
+      const jobId = await adapter.submitJob(providerRequest, apiKey);
+
+      // Step 7: Poll until complete (with timeout)
+      const imageResult = await adapter.pollUntilComplete(
+        jobId,
+        apiKey,
+        60000, // 60 second timeout
+        2000 // Poll every 2 seconds
+      );
+
+      // Step 8: Download image from provider
+      const imageResponse = await fetch(imageResult.image_url);
+      if (!imageResponse.ok) {
+        throw new Error('Failed to download image from provider');
+      }
+      imageData = await imageResponse.arrayBuffer();
+      imageMetadata = {
+        provider: imageResult.provider,
+        model: imageResult.model,
+        dimensions: imageResult.metadata.dimensions,
+        format: imageResult.metadata.format,
+        generation_time_ms: imageResult.metadata.generation_time_ms,
+      };
     }
-
-    // Step 6: Submit job to provider
-    const jobId = await adapter.submitJob(providerRequest, apiKey);
-
-    // Step 8: Poll until complete (with timeout)
-    const imageResult = await adapter.pollUntilComplete(
-      jobId,
-      apiKey,
-      60000, // 60 second timeout
-      2000 // Poll every 2 seconds
-    );
-
-    // Step 8: Download image from provider
-    const imageResponse = await fetch(imageResult.image_url);
-    if (!imageResponse.ok) {
-      throw new Error('Failed to download image from provider');
-    }
-    const imageData = await imageResponse.arrayBuffer();
 
     // Step 9: Upload to R2
     const filename = `${body.prompt.substring(0, 50).replace(/[^a-z0-9]/gi, '_')}.png`;
     const metadata = createImageMetadata(
       instanceId,
       provider,
-      imageResult.model,
+      imageMetadata.model,
       body.prompt,
       body.project_id
     );
@@ -298,10 +303,10 @@ async function handleGenerate(
       image_url: uploadResult.cdn_url,
       r2_path: uploadResult.r2_path,
       metadata: {
-        provider: imageResult.provider,
-        model: imageResult.model,
-        dimensions: imageResult.metadata.dimensions,
-        format: imageResult.metadata.format,
+        provider: imageMetadata.provider,
+        model: imageMetadata.model,
+        dimensions: imageMetadata.dimensions,
+        format: imageMetadata.format,
         generation_time_ms: generationTime,
       },
       request_id: requestId,
@@ -347,48 +352,6 @@ async function handleGenerate(
 }
 
 /**
- * Fetch model configuration from config service
- */
-async function getModelConfig(modelId: string, env: Env): Promise<any> {
-  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
-
-  try {
-    console.log(`Fetching model config for ${modelId} from ${configServiceUrl}`);
-
-    const response = await fetch(`${configServiceUrl}/model-config/${modelId}`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.log(`Model config not found for ${modelId} - will use legacy mode`);
-      } else {
-        console.error(`Failed to fetch model config for ${modelId}:`, response.status, response.statusText);
-      }
-      return null;
-    }
-
-    const result = await response.json();
-    console.log(`Successfully fetched model config for ${modelId}`);
-
-    // The config service returns data in a wrapper object
-    return result.data || result;
-  } catch (error) {
-    console.error(`Error fetching model config for ${modelId}:`, error);
-    return null;
-  }
-}
-
-/**
- * Get default model ID for the instance
- */
-function getDefaultModelId(env: Env): string {
-  return env.DEFAULT_MODEL_ID || 'ideogram-v2';
-}
-
-/**
  * Get instance configuration
  * Note: This is a mock implementation. In production, this would call
  * Team 1's Config Service to get the real configuration from D1.
@@ -401,12 +364,10 @@ async function getInstanceConfig(
   // In production, this would query Team 1's Config Service
   return {
     instance_id: instanceId,
-    org_id: 'your-org-id',
+    org_id: 'solamp',
     api_keys: {
       // These would come from D1 database in production
       ideogram: env.IDEOGRAM_API_KEY || 'ide_mock_key',
-      gemini: env.GEMINI_API_KEY || '',
-      openai: env.OPENAI_API_KEY || '',
     },
     rate_limits: {
       ideogram: {
@@ -416,6 +377,212 @@ async function getInstanceConfig(
     },
     r2_bucket: 'production-images',
   };
+}
+
+/**
+ * Fetch model configuration from Config Service
+ * Returns null if fetch fails (for fallback handling)
+ */
+async function fetchModelConfig(
+  modelId: string,
+  env: Env
+): Promise<ModelConfig | null> {
+  try {
+    const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+    const url = `${configServiceUrl}/model-config/${modelId}`;
+
+    console.log(`Fetching model config from: ${url}`);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to fetch model config: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const result = await response.json() as { data: ModelConfig };
+
+    if (!result.data) {
+      console.error('Model config response missing data field');
+      return null;
+    }
+
+    // Validate payload mapping structure
+    if (!validatePayloadMapping(result.data.payload_mapping)) {
+      console.error('Invalid payload mapping structure in model config');
+      return null;
+    }
+
+    console.log(`Successfully fetched config for model: ${result.data.model_id}`);
+    return result.data;
+  } catch (error) {
+    console.error('Error fetching model config:', error);
+    return null;
+  }
+}
+
+/**
+ * Generate image using dynamic model config and payload mapping
+ * Returns image data and metadata on success
+ */
+async function generateWithModelConfig(
+  modelConfig: ModelConfig,
+  prompt: string,
+  options: Record<string, any>,
+  apiKey: string
+): Promise<{ imageData: ArrayBuffer; metadata: any }> {
+  const startTime = Date.now();
+
+  // Prepare user inputs for payload mapping
+  const userInputs = {
+    user_prompt: prompt,
+    ...options,
+  };
+
+  // Apply payload mapping to create provider request
+  const providerRequest = applyPayloadMapping(
+    modelConfig.payload_mapping as PayloadMapping,
+    userInputs,
+    apiKey
+  );
+
+  console.log(`Calling provider endpoint: ${modelConfig.payload_mapping.endpoint}`);
+
+  // Construct full API URL
+  const baseUrl = getProviderBaseUrl(modelConfig.provider_id);
+  const fullUrl = `${baseUrl}${providerRequest.endpoint}`;
+
+  // Submit job to provider
+  const submitResponse = await fetch(fullUrl, {
+    method: providerRequest.method,
+    headers: providerRequest.headers,
+    body: JSON.stringify(providerRequest.body),
+  });
+
+  if (!submitResponse.ok) {
+    const errorText = await submitResponse.text();
+    throw new Error(`Provider API error: ${submitResponse.status} - ${errorText}`);
+  }
+
+  const submitResult = await submitResponse.json();
+  console.log('Provider submit response:', JSON.stringify(submitResult).substring(0, 200));
+
+  // Extract job_id from response using response mapping
+  const mappedResponse = applyResponseMapping(
+    submitResult,
+    modelConfig.payload_mapping.response_mapping
+  );
+
+  const jobId = mappedResponse.job_id;
+  if (!jobId) {
+    throw new Error('Failed to extract job_id from provider response');
+  }
+
+  console.log(`Job submitted with ID: ${jobId}`);
+
+  // Poll for completion (similar to existing adapter pattern)
+  const imageUrl = await pollForCompletion(
+    modelConfig.provider_id,
+    jobId,
+    apiKey,
+    modelConfig.payload_mapping.response_mapping,
+    60000, // 60 second timeout
+    2000 // Poll every 2 seconds
+  );
+
+  // Download image from provider
+  const imageResponse = await fetch(imageUrl);
+  if (!imageResponse.ok) {
+    throw new Error(`Failed to download image from provider: ${imageResponse.status}`);
+  }
+
+  const imageData = await imageResponse.arrayBuffer();
+  const generationTime = Date.now() - startTime;
+
+  return {
+    imageData,
+    metadata: {
+      provider: modelConfig.provider_id,
+      model: modelConfig.model_id,
+      dimensions: options.aspect_ratio || '1:1',
+      format: 'png',
+      generation_time_ms: generationTime,
+    },
+  };
+}
+
+/**
+ * Get base URL for a provider
+ */
+function getProviderBaseUrl(providerId: string): string {
+  const baseUrls: Record<string, string> = {
+    ideogram: 'https://api.ideogram.ai',
+    openai: 'https://api.openai.com',
+    stability: 'https://api.stability.ai',
+  };
+
+  return baseUrls[providerId] || `https://api.${providerId}.com`;
+}
+
+/**
+ * Poll provider until job is complete
+ * Uses response mapping to extract status and image URL
+ */
+async function pollForCompletion(
+  providerId: string,
+  jobId: string,
+  apiKey: string,
+  responseMapping: Record<string, string>,
+  timeoutMs: number = 60000,
+  pollIntervalMs: number = 2000
+): Promise<string> {
+  const startTime = Date.now();
+  const baseUrl = getProviderBaseUrl(providerId);
+
+  while (Date.now() - startTime < timeoutMs) {
+    // Poll the job status endpoint
+    const pollUrl = `${baseUrl}/${jobId}`;
+
+    const response = await fetch(pollUrl, {
+      method: 'GET',
+      headers: {
+        'Api-Key': apiKey,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Polling failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    const mapped = applyResponseMapping(result, responseMapping);
+
+    console.log(`Job ${jobId} status: ${mapped.status}`);
+
+    // Check if completed
+    if (mapped.status === 'COMPLETE' || mapped.status === 'completed') {
+      if (!mapped.image_url) {
+        throw new Error('Job completed but no image_url in response');
+      }
+      return mapped.image_url;
+    }
+
+    // Check if failed
+    if (mapped.status === 'FAILED' || mapped.status === 'failed') {
+      throw new Error(`Job failed: ${JSON.stringify(result)}`);
+    }
+
+    // Wait before next poll
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+  }
+
+  throw new Error(`Job polling timeout after ${timeoutMs}ms`);
 }
 
 /**

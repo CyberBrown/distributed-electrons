@@ -4,8 +4,8 @@
 
 export interface GenerateRequest {
   prompt: string;
-  model?: string;
-  model_id?: string; // Model ID to fetch config from Config Service
+  model?: string; // Legacy format: "provider:model" or just "model"
+  model_id?: string; // New format: model ID for dynamic config lookup
   instance_id?: string;
   project_id?: string;
   options?: {
@@ -44,7 +44,6 @@ export interface Env {
   // Environment variables
   DEFAULT_INSTANCE_ID?: string;
   DEFAULT_PROVIDER?: string;
-  CONFIG_SERVICE_URL?: string; // Config Service URL
 
   // API Keys (from secrets)
   OPENAI_API_KEY?: string;
@@ -76,39 +75,4 @@ export interface TextResult {
   model: string;
   tokens_used: number;
   metadata?: Record<string, any>;
-}
-
-// Model Config Types (from Config Service)
-export interface Capabilities {
-  image?: boolean;
-  video?: boolean;
-  text?: boolean;
-  audio?: boolean;
-  [key: string]: boolean | undefined;
-}
-
-export interface PayloadMapping {
-  endpoint: string;
-  method: string;
-  headers: Record<string, string>;
-  body: any;
-  response_mapping: Record<string, string>;
-  defaults?: Record<string, any>;
-  transformations?: Record<string, string>;
-}
-
-export interface ModelConfig {
-  config_id: string;
-  model_id: string;
-  provider_id: string;
-  display_name: string;
-  description?: string;
-  capabilities: Capabilities;
-  pricing?: any;
-  rate_limits?: any;
-  payload_mapping: PayloadMapping;
-  prompt_template?: any;
-  status: 'active' | 'beta' | 'deprecated';
-  created_at: string;
-  updated_at: string;
 }
