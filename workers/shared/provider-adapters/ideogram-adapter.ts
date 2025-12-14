@@ -24,38 +24,38 @@ export class IdeogramAdapter extends ProviderAdapter {
     prompt: string,
     options: ImageGenerationOptions
   ): ProviderRequest {
-    const imageRequest: any = {
+    const payload: any = {
       prompt,
-      model: options.model || 'V_2',
+      model: options.model || 'ideogram-v2',
     };
 
     if (options.aspect_ratio) {
-      imageRequest.aspect_ratio = options.aspect_ratio;
+      payload.aspect_ratio = options.aspect_ratio;
     }
 
     if (options.style) {
-      imageRequest.style_type = options.style;
+      payload.style_type = options.style;
     }
 
     // Add any additional options
     Object.keys(options).forEach((key) => {
       if (!['model', 'aspect_ratio', 'style'].includes(key)) {
-        imageRequest[key] = options[key];
+        payload[key] = options[key];
       }
     });
 
     return {
       provider: this.providerName,
-      payload: { image_request: imageRequest },
+      payload: payload,
     };
   }
 
   async submitJob(request: ProviderRequest, apiKey: string): Promise<string> {
-    const response = await fetch(`${IDEOGRAM_API_BASE}/generate`, {
+    const response = await fetch(`${IDEOGRAM_API_BASE}/v1/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Api-Key': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(request.payload),
     });
@@ -65,32 +65,53 @@ export class IdeogramAdapter extends ProviderAdapter {
     }
 
     const data = await response.json();
-    // Ideogram returns results immediately in data array
-    // Store the response and return a pseudo job ID
-    return JSON.stringify(data);
+    // Return the job_id from the response
+    return data.job_id;
   }
 
   async checkStatus(jobId: string, apiKey: string): Promise<JobStatus> {
-    // Ideogram API is synchronous, so job is always completed
+    const response = await fetch(`${IDEOGRAM_API_BASE}/v1/status/${jobId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw await this.handleError(response);
+    }
+
+    const data = await response.json();
+
     return {
-      status: 'completed',
-      progress: 100,
+      status: this.mapStatus(data.status),
+      progress: data.progress || (data.status === 'completed' ? 100 : 0),
+      error: data.error,
     };
   }
 
   async fetchResult(jobId: string, apiKey: string): Promise<ImageResult> {
-    // JobId is actually the stringified response data from submitJob
-    const data = JSON.parse(jobId);
-    const imageData = data.data[0];
+    const response = await fetch(`${IDEOGRAM_API_BASE}/v1/result/${jobId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw await this.handleError(response);
+    }
+
+    const data = await response.json();
 
     return {
-      image_url: imageData.url,
+      image_url: data.image_url,
       provider: this.providerName,
-      model: 'V_2',
+      model: data.model || 'ideogram-v2',
       metadata: {
-        dimensions: imageData.resolution || '1024x1024',
-        format: 'png',
-        generation_time_ms: 0,
+        dimensions: data.resolution || '1024x1024',
+        format: data.format || 'png',
+        generation_time_ms: data.generation_time_ms || 0,
       },
     };
   }

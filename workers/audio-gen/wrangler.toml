@@ -27,7 +27,7 @@ DEFAULT_MODEL_ID = "eleven_monolingual_v1"
 # Secrets (set with: wrangler secret put <NAME>)
 # - ELEVENLABS_API_KEY
 
-# Custom routes
-routes = [
-  { pattern = "audio.distributedelectrons.com/*", zone_id = "417d6062ae2113dc20c4910e9f6f691f" }
-]
+# Custom Domain
+[[routes]]
+pattern = "audio.distributedelectrons.com"
+custom_domain = true
