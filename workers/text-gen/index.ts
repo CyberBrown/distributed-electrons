@@ -18,6 +18,32 @@ import {
   validatePayloadMapping,
 } from '../shared/utils/payload-mapper';
 
+/**
+ * Infer the provider from model name when no explicit prefix is given
+ */
+function inferProvider(model: string, defaultProvider: string = 'openai'): string {
+  // Explicit provider prefix takes precedence
+  if (model.includes(':')) {
+    return model.split(':')[0];
+  }
+
+  // Infer from model name
+  const modelLower = model.toLowerCase();
+  if (modelLower.startsWith('claude')) return 'anthropic';
+  if (modelLower.startsWith('gpt') || modelLower.startsWith('o1') || modelLower.startsWith('chatgpt')) return 'openai';
+  if (modelLower.startsWith('gemini')) return 'google';
+  if (modelLower.startsWith('llama') || modelLower.startsWith('mixtral') || modelLower.startsWith('mistral')) return 'together';
+
+  return defaultProvider;
+}
+
+/**
+ * Strip provider prefix from model name if present
+ */
+function stripProviderPrefix(model: string): string {
+  return model.includes(':') ? model.split(':').slice(1).join(':') : model;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // Generate request ID for tracking
@@ -173,8 +199,8 @@ async function handleGenerate(
         // Model config not found, fall back to default behavior
         console.warn(`Model config not found for ${body.model_id}, falling back to hardcoded providers`);
 
-        const provider = body.model?.split(':')[0] || env.DEFAULT_PROVIDER || 'openai';
-        const model = body.model || getDefaultModel(provider);
+        const provider = inferProvider(body.model || '', env.DEFAULT_PROVIDER || 'openai');
+        const model = stripProviderPrefix(body.model || '') || getDefaultModel(provider);
         const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
 
         if (!apiKey) {
@@ -190,8 +216,8 @@ async function handleGenerate(
       }
     } else {
       // No model_id provided - use legacy behavior with hardcoded providers
-      const provider = body.model?.split(':')[0] || env.DEFAULT_PROVIDER || 'openai';
-      const model = body.model || getDefaultModel(provider);
+      const provider = inferProvider(body.model || '', env.DEFAULT_PROVIDER || 'openai');
+      const model = stripProviderPrefix(body.model || '') || getDefaultModel(provider);
 
       // Get API key
       const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
@@ -597,8 +623,8 @@ async function handleGenerateStream(
     }
 
     // Determine provider and model
-    const provider = body.model?.split(':')[0] || env.DEFAULT_PROVIDER || 'openai';
-    const model = body.model || getDefaultModel(provider);
+    const provider = inferProvider(body.model || '', env.DEFAULT_PROVIDER || 'openai');
+    const model = stripProviderPrefix(body.model || '') || getDefaultModel(provider);
 
     // Get API key
     const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
