@@ -1,4 +1,4 @@
-import { ErrorResponse, SuccessResponse } from './types';
+import { ErrorResponse } from './types';
 
 /**
  * Generate a unique request ID for tracing
@@ -10,12 +10,12 @@ export function generateRequestId(): string {
 /**
  * Create a standardized JSON response
  */
-export function jsonResponse<T>(
+export function jsonResponse<T extends object>(
   data: T | ErrorResponse,
   status: number = 200,
   requestId?: string
 ): Response {
-  const body = 'error' in data
+  const body = 'error' in (data as object)
     ? data
     : { data, request_id: requestId || generateRequestId() };
 
@@ -46,11 +46,15 @@ export function errorResponse(
 /**
  * Create a success response
  */
-export function successResponse<T>(
+export function successResponse<T extends object>(
   data: T,
+  statusOrRequestId?: number | string,
   requestId?: string
 ): Response {
-  return jsonResponse(data, 200, requestId);
+  if (typeof statusOrRequestId === 'number') {
+    return jsonResponse(data, statusOrRequestId, requestId);
+  }
+  return jsonResponse(data, 200, statusOrRequestId);
 }
 
 /**

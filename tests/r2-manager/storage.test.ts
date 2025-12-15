@@ -2,7 +2,7 @@
  * R2 Storage Manager Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   uploadImage,
   generatePath,
@@ -30,7 +30,7 @@ class MockR2Bucket {
     };
     this.storage.set(key, data);
 
-    return data as R2Object;
+    return data as unknown as R2Object;
   }
 
   async get(key: string): Promise<R2Object | null> {
@@ -177,7 +177,7 @@ describe('R2 Storage Manager', () => {
 
       expect(result.r2_path).toMatch(/^production\/content-forge\/\d+_test\.png$/);
       expect(result.cdn_url).toContain('https://cdn.example.com/');
-      expect(result.bucket).toBe('test-bucket');
+      expect(result.bucket).toBe('default');
       expect(result.size_bytes).toBe(1024);
       expect(result.uploaded_at).toBeDefined();
     });

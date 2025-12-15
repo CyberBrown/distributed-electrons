@@ -5,7 +5,6 @@
 
 import { ProviderAdapter } from './base-adapter';
 import {
-  applyPayloadMapping,
   applyResponseMapping,
   PayloadMapping,
 } from '../utils/payload-mapper';
@@ -53,7 +52,7 @@ export class DynamicAdapter extends ProviderAdapter {
   /**
    * Submit job to provider using mapped payload
    */
-  async submitJob(request: ProviderRequest, apiKey: string): Promise<string> {
+  async submitJob(request: ProviderRequest, _apiKey: string): Promise<string> {
     const { endpoint, method, headers, body } = request.payload;
 
     const response = await fetch(endpoint, {
@@ -66,7 +65,7 @@ export class DynamicAdapter extends ProviderAdapter {
       throw await this.handleError(response, this.providerName);
     }
 
-    const data = await response.json();
+    const data = await response.json() as Record<string, any>;
 
     // Extract job_id from response using response mapping
     const responseMapping = this.config.payload_mapping.response_mapping;
@@ -91,7 +90,7 @@ export class DynamicAdapter extends ProviderAdapter {
    * Check status of submitted job
    * For synchronous APIs, always returns completed
    */
-  async checkStatus(jobId: string, apiKey: string): Promise<JobStatus> {
+  async checkStatus(jobId: string, _apiKey: string): Promise<JobStatus> {
     // Try to parse as JSON - if it works, this is a synchronous API response
     try {
       JSON.parse(jobId);
@@ -112,7 +111,7 @@ export class DynamicAdapter extends ProviderAdapter {
   /**
    * Fetch result from completed job
    */
-  async fetchResult(jobId: string, apiKey: string): Promise<ImageResult> {
+  async fetchResult(jobId: string, _apiKey: string): Promise<ImageResult> {
     // Try to parse jobId as the full response (for synchronous APIs)
     try {
       const data = JSON.parse(jobId);
@@ -177,7 +176,7 @@ export class DynamicAdapter extends ProviderAdapter {
     let retryAfter: number | undefined;
 
     try {
-      const errorData = await response.json();
+      const errorData = await response.json() as Record<string, any>;
       errorMessage = errorData.error || errorData.message || errorMessage;
       errorCode = errorData.error_code || errorCode;
     } catch {

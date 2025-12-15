@@ -28,7 +28,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('healthy');
@@ -73,7 +73,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -90,7 +90,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -109,7 +109,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -151,7 +151,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -192,7 +192,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       expect(response.headers.get('X-Request-ID')).toBeDefined();
@@ -207,7 +207,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       expect(response.headers.get('X-Request-ID')).toBe(data.request_id);
@@ -246,7 +246,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.metadata.format).toBe('mp4');
       expect(data.metadata.resolution).toBe('hd');
@@ -289,7 +289,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.metadata.format).toBe('gif');
       expect(data.metadata.resolution).toBe('720');
@@ -322,7 +322,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, envWithoutKey);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(500);
       expect(data.error_code).toBe('MISSING_API_KEY');
@@ -359,7 +359,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(429);
       expect(data.error_code).toBe('PROVIDER_RATE_LIMIT');
@@ -394,7 +394,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(401);
       expect(data.error_code).toBe('INVALID_API_KEY');
@@ -409,7 +409,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(data.error).toBeDefined();
@@ -444,7 +444,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(500);
       expect(data.error_code).toBe('RENDER_ERROR');
@@ -458,7 +458,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -482,7 +482,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -518,7 +518,7 @@ describe('Render Service Worker', () => {
         });
 
         const response = await worker.fetch(request, mockEnv);
-        const data = await response.json();
+        const data = await response.json() as Record<string, any>;
 
         expect(data.status).toBe(expected);
       }
@@ -540,7 +540,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.status).toBe('failed');
       expect(data.error).toBe('Video encoding failed');
@@ -557,7 +557,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, envWithoutKey);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(500);
       expect(data.error_code).toBe('MISSING_API_KEY');
@@ -575,7 +575,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(500);
       expect(data.error_code).toBe('STATUS_ERROR');
@@ -589,7 +589,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('ROUTE_NOT_FOUND');
@@ -602,7 +602,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('ROUTE_NOT_FOUND');
@@ -657,7 +657,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -705,7 +705,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -749,7 +749,7 @@ describe('Render Service Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);

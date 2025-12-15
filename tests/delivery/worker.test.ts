@@ -47,7 +47,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('healthy');
@@ -106,7 +106,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -128,7 +128,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -147,7 +147,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('MISSING_FIELD');
@@ -172,7 +172,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('NOT_FOUND');
@@ -191,7 +191,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(data.quality_score).toBeGreaterThan(0);
       expect(data.quality_score).toBeLessThanOrEqual(1);
@@ -224,7 +224,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -243,7 +243,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -257,7 +257,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_JSON');
@@ -291,7 +291,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -305,7 +305,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('MISSING_PARAM');
@@ -323,7 +323,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('NOT_FOUND');
@@ -353,7 +353,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -368,7 +368,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('MISSING_FIELD');
@@ -393,7 +393,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_STATUS');
@@ -424,7 +424,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -451,7 +451,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -465,7 +465,7 @@ describe('Delivery Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv as any);
-      const data = await response.json() as any;
+      const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('ROUTE_NOT_FOUND');

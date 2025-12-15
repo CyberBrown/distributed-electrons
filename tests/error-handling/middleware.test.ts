@@ -10,7 +10,6 @@ import {
   createSuccessResponse,
 } from '../../workers/shared/error-handling/middleware.js';
 import {
-  AppError,
   AuthenticationError,
   RateLimitError,
   InternalError,
@@ -42,7 +41,7 @@ describe('withErrorHandler', () => {
     const response = await wrapped(request, {}, ctx);
 
     expect(response.status).toBe(401);
-    const body = await response.json();
+    const body = await response.json() as Record<string, any>;
     expect(body.error).toBe('Invalid credentials');
     expect(body.error_code).toBe(ErrorCodes.AUTH_FAILED);
     expect(body.request_id).toBeDefined();
@@ -57,7 +56,7 @@ describe('withErrorHandler', () => {
     const response = await wrapped(request, {}, ctx);
 
     expect(response.status).toBe(500);
-    const body = await response.json();
+    const body = await response.json() as Record<string, any>;
     expect(body.error).toBe('Unexpected error');
     expect(body.error_code).toBe('INTERNAL_ERROR');
   });
@@ -72,7 +71,7 @@ describe('withErrorHandler', () => {
     const ctx = {} as ExecutionContext;
     const response = await wrapped(request, {}, ctx);
 
-    const body = await response.json();
+    const body = await response.json() as Record<string, any>;
     expect(body.request_id).toBe('custom-req-123');
     expect(response.headers.get('X-Request-ID')).toBe('custom-req-123');
   });
@@ -119,7 +118,7 @@ describe('withErrorHandler', () => {
     const ctx = {} as ExecutionContext;
     const response = await wrapped(request, {}, ctx);
 
-    const body = await response.json();
+    const body = await response.json() as Record<string, any>;
     expect(body.details).toBeDefined();
     expect(body.details.stack).toBeDefined();
   });
@@ -198,7 +197,7 @@ describe('catchAsync', () => {
 
   it('should convert non-Error rejections to Error', async () => {
     const promise = Promise.reject('string error');
-    const [error, result] = await catchAsync(promise);
+    const [error, _result] = await catchAsync(promise);
 
     expect(error).toBeInstanceOf(Error);
     expect(error?.message).toBe('string error');
@@ -311,7 +310,7 @@ describe('createSuccessResponse', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe('application/json');
-    expect(await response.json()).toEqual(data);
+    expect(await response.json() as Record<string, any>).toEqual(data);
   });
 
   it('should include request ID if provided', () => {
@@ -333,6 +332,6 @@ describe('createSuccessResponse', () => {
     };
     const response = createSuccessResponse(data);
 
-    expect(await response.json()).toEqual(data);
+    expect(await response.json() as Record<string, any>).toEqual(data);
   });
 });

@@ -2,16 +2,16 @@
  * Rate Limiter Durable Object Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { RateLimiter } from '../../workers/shared/rate-limiter/limiter';
 import type { RateLimitConfig } from '../../workers/shared/rate-limiter/types';
 
 // Mock DurableObjectState
-class MockDurableObjectState implements DurableObjectState {
+class MockDurableObjectState {
   private _storageMap = new Map<string, any>();
   id: DurableObjectId = {} as DurableObjectId;
 
-  waitUntil(promise: Promise<any>): void {}
+  waitUntil(_promise: Promise<any>): void {}
 
   blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T> {
     return callback();
@@ -41,7 +41,7 @@ describe('RateLimiter', () => {
 
   beforeEach(() => {
     state = new MockDurableObjectState();
-    limiter = new RateLimiter(state);
+    limiter = new RateLimiter(state as unknown as DurableObjectState);
   });
 
   describe('checkLimit', () => {
@@ -56,7 +56,7 @@ describe('RateLimiter', () => {
       });
 
       const response = await limiter.fetch(request);
-      const result = await response.json();
+      const result = await response.json() as Record<string, any>;
 
       expect(result.allowed).toBe(true);
       expect(result.remaining).toBe(10);
@@ -83,7 +83,7 @@ describe('RateLimiter', () => {
       });
 
       const response = await limiter.fetch(checkRequest);
-      const result = await response.json();
+      const result = await response.json() as Record<string, any>;
 
       expect(result.allowed).toBe(false);
       expect(result.retry_after).toBeGreaterThan(0);
@@ -110,7 +110,7 @@ describe('RateLimiter', () => {
       });
 
       const response = await limiter.fetch(checkRequest);
-      const result = await response.json();
+      const result = await response.json() as Record<string, any>;
 
       expect(result.allowed).toBe(false);
     });
@@ -124,7 +124,7 @@ describe('RateLimiter', () => {
       });
 
       const response = await limiter.fetch(request);
-      const result = await response.json();
+      const result = await response.json() as Record<string, any>;
 
       console.log('Response:', response);
       console.log('Result:', result);
@@ -137,7 +137,7 @@ describe('RateLimiter', () => {
         method: 'GET',
       });
       const statsResponse = await limiter.fetch(statsRequest);
-      const stats = await statsResponse.json();
+      const stats = await statsResponse.json() as Record<string, any>;
 
       expect(stats.total_requests).toBe(1);
       expect(stats.total_tokens).toBe(50);
@@ -157,7 +157,7 @@ describe('RateLimiter', () => {
         method: 'GET',
       });
       const statsResponse = await limiter.fetch(statsRequest);
-      const stats = await statsResponse.json();
+      const stats = await statsResponse.json() as Record<string, any>;
 
       expect(stats.total_requests).toBe(3);
       expect(stats.total_tokens).toBe(30);
@@ -184,7 +184,7 @@ describe('RateLimiter', () => {
         method: 'GET',
       });
       const statsResponse = await limiter.fetch(statsRequest);
-      const stats = await statsResponse.json();
+      const stats = await statsResponse.json() as Record<string, any>;
 
       expect(stats.total_requests).toBe(0);
       expect(stats.total_tokens).toBe(0);
@@ -201,7 +201,7 @@ describe('RateLimiter', () => {
         method: 'GET',
       });
       const statsResponse = await limiter.fetch(statsRequest);
-      const stats = await statsResponse.json();
+      const stats = await statsResponse.json() as Record<string, any>;
 
       expect(stats.total_requests).toBeGreaterThanOrEqual(0);
     });
@@ -214,7 +214,7 @@ describe('RateLimiter', () => {
       });
 
       const response = await limiter.fetch(request);
-      const stats = await response.json();
+      const stats = await response.json() as Record<string, any>;
 
       expect(stats).toHaveProperty('total_requests');
       expect(stats).toHaveProperty('total_tokens');

@@ -15,7 +15,6 @@ import type {
   ProviderResponse,
   StoredDeliverable,
   CallbackPayload,
-  DeliveryResponse,
   ErrorResponse,
 } from './types';
 import { assessQuality, shouldAutoApprove, shouldAutoReject } from './quality';

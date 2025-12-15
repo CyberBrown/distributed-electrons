@@ -93,4 +93,5 @@ if (require.main === module) {
   updateInstance(options);
 }
 
-export { updateInstance, UpdateOptions };
+export { updateInstance };
+export type { UpdateOptions };

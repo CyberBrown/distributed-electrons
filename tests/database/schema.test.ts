@@ -6,35 +6,18 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { DatabaseQueries, generateId, hashApiKey } from '../../infrastructure/database/queries';
+import { generateId, hashApiKey } from '../../infrastructure/database/queries';
 
 // Mock D1Database for testing
 // In production, this would be provided by Cloudflare Workers runtime
-interface D1Result<T = unknown> {
-  results?: T[];
-  success: boolean;
-  meta?: any;
-}
-
-interface D1PreparedStatement {
-  bind(...values: any[]): D1PreparedStatement;
-  first<T = unknown>(colName?: string): Promise<T | null>;
-  run(): Promise<D1Result>;
-  all<T = unknown>(): Promise<D1Result<T>>;
-}
-
-interface D1Database {
-  prepare(query: string): D1PreparedStatement;
-  dump(): Promise<ArrayBuffer>;
-  batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
-  exec(query: string): Promise<D1Result>;
-}
+// D1Result, D1PreparedStatement and D1Database interfaces provided by Cloudflare Workers runtime
 
 // Note: These tests assume a D1 database instance is available
 // For local testing, use wrangler dev or miniflare with D1 support
 describe('Database Schema Tests', () => {
-  let db: D1Database;
-  let queries: DatabaseQueries;
+  // Note: In actual implementation, these would be initialized:
+  // let db: D1Database;
+  // let queries: DatabaseQueries;
 
   beforeAll(async () => {
     // In actual implementation, this would connect to a test D1 database

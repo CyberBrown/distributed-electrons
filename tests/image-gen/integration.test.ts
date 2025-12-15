@@ -3,7 +3,7 @@
  * Tests the full workflow from request to R2 upload
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 describe('Image Generation E2E Flow', () => {
   it('should describe the full integration flow', () => {

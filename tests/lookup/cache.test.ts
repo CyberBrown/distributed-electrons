@@ -6,10 +6,10 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InstanceCache } from '../../infrastructure/lookup/cache';
-import { InstanceConfig, LookupErrorType } from '../../infrastructure/lookup/types';
+import { InstanceConfig } from '../../infrastructure/lookup/types';
 
 // Mock KV namespace
-class MockKVNamespace implements KVNamespace {
+class MockKVNamespace {
   private store = new Map<string, { value: string; expiration?: number }>();
 
   async get(key: string, options?: any): Promise<any> {
@@ -48,8 +48,6 @@ class MockKVNamespace implements KVNamespace {
 
   // Required KVNamespace methods (not used in tests)
   getWithMetadata = vi.fn();
-  put = this.put.bind(this);
-  delete = this.delete.bind(this);
 }
 
 describe('InstanceCache', () => {

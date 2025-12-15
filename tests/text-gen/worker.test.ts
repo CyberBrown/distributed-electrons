@@ -27,7 +27,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('healthy');
@@ -45,7 +45,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -60,7 +60,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -75,7 +75,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       expect(response.headers.get('X-Request-ID')).toBeDefined();
@@ -93,7 +93,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('ROUTE_NOT_FOUND');
@@ -107,7 +107,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(data.error).toBeDefined();
@@ -122,7 +122,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('ROUTE_NOT_FOUND');
@@ -135,7 +135,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('ROUTE_NOT_FOUND');
@@ -257,7 +257,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       // Will fail at provider step in unit test but validates the request structure
@@ -271,7 +271,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -288,7 +288,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       // Validates that model parameter doesn't cause errors
@@ -305,7 +305,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       // Validates that model_id parameter doesn't cause errors
@@ -321,7 +321,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data).toHaveProperty('error');
       expect(data).toHaveProperty('error_code');
@@ -336,7 +336,7 @@ describe('Text Generation Worker', () => {
         method: 'GET',
       });
 
-      const response = await worker.fetch(request, mockEnv);
+      await worker.fetch(request, mockEnv);
 
       // Health endpoint doesn't include X-Request-ID header
       // but error responses should
@@ -360,7 +360,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -375,7 +375,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -389,7 +389,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       expect(response.headers.get('X-Request-ID')).toBeDefined();
@@ -410,7 +410,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       // Returns MISSING_API_KEY because the provider check happens after key check
       expect(response.status).toBe(500);
@@ -498,7 +498,7 @@ describe('Text Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(data.error).toBeDefined();

@@ -312,4 +312,5 @@ if (require.main === module) {
   });
 }
 
-export { deployInstance, DeployOptions, InstanceConfig };
+export { deployInstance };
+export type { DeployOptions, InstanceConfig };

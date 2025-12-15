@@ -34,7 +34,7 @@ describe('Instance Handlers', () => {
       });
 
       const response = await createInstance(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data).toBeDefined();
@@ -57,7 +57,7 @@ describe('Instance Handlers', () => {
       });
 
       const response = await createInstance(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error).toContain('Missing required fields');
@@ -72,7 +72,7 @@ describe('Instance Handlers', () => {
       });
 
       const response = await createInstance(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error).toBe('Invalid JSON body');
@@ -97,7 +97,7 @@ describe('Instance Handlers', () => {
       mockDB._setData('instances', [testInstance]);
 
       const response = await getInstance('inst-123', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data.instance_id).toBe('inst-123');
@@ -107,7 +107,7 @@ describe('Instance Handlers', () => {
 
     it('should return 404 for non-existent instance', async () => {
       const response = await getInstance('non-existent', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('Instance not found');
@@ -145,7 +145,7 @@ describe('Instance Handlers', () => {
       mockDB._setData('instances', testInstances);
 
       const response = await listInstances(null, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data).toHaveLength(2);
@@ -180,7 +180,7 @@ describe('Instance Handlers', () => {
       mockDB._setData('instances', testInstances);
 
       const response = await listInstances('org-123', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data).toHaveLength(1);
@@ -231,7 +231,7 @@ describe('Instance Handlers', () => {
       });
 
       const response = await updateInstance('non-existent', request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('Instance not found');
@@ -259,7 +259,7 @@ describe('Instance Handlers', () => {
       });
 
       const response = await updateInstance('inst-123', request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error).toBe('No fields to update');
@@ -283,7 +283,7 @@ describe('Instance Handlers', () => {
       mockDB._setData('instances', [testInstance]);
 
       const response = await deleteInstance('inst-123', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data.deleted).toBe(true);
@@ -292,7 +292,7 @@ describe('Instance Handlers', () => {
 
     it('should return 404 for non-existent instance', async () => {
       const response = await deleteInstance('non-existent', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('Instance not found');

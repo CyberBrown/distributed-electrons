@@ -26,7 +26,7 @@ describe('Image Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('healthy');
@@ -43,7 +43,7 @@ describe('Image Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -58,7 +58,7 @@ describe('Image Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -72,7 +72,7 @@ describe('Image Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       expect(response.headers.get('X-Request-ID')).toBeDefined();
@@ -90,7 +90,7 @@ describe('Image Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('ROUTE_NOT_FOUND');
@@ -104,7 +104,7 @@ describe('Image Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(data.error).toBeDefined();

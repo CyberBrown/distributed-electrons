@@ -93,6 +93,17 @@ export async function getProviderApiKey(
   const kvKey = `provider_keys:${instanceId}:${provider}`;
 
   try {
+    // Check if PROVIDER_KEYS KV is available
+    if (!env.PROVIDER_KEYS) {
+      // Fallback to environment variable for development
+      const envKey = getEnvApiKey(provider, env);
+      if (envKey) {
+        console.log(`Using fallback env API key for ${provider}`);
+        return envKey;
+      }
+      return null;
+    }
+
     const encryptedKey = await env.PROVIDER_KEYS.get(kvKey);
 
     if (!encryptedKey) {
@@ -136,6 +147,10 @@ export async function storeProviderApiKey(
   env: Env
 ): Promise<void> {
   const kvKey = `provider_keys:${instanceId}:${provider}`;
+
+  if (!env.PROVIDER_KEYS) {
+    throw new Error('PROVIDER_KEYS KV namespace not configured');
+  }
 
   let valueToStore = apiKey;
 

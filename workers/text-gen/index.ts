@@ -11,7 +11,6 @@ import type {
   InstanceConfig,
   TextResult,
   ModelConfig,
-  PayloadMapping,
 } from './types';
 import {
   applyPayloadMapping,
@@ -479,12 +478,14 @@ function getDefaultModel(provider: string): string {
  * Get API key from environment
  */
 function getEnvApiKey(provider: string, env: Env): string | undefined {
-  const keyMap: Record<string, keyof Env> = {
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-  };
-  const key = keyMap[provider.toLowerCase()];
-  return key ? env[key] : undefined;
+  const providerLower = provider.toLowerCase();
+  if (providerLower === 'openai') {
+    return env.OPENAI_API_KEY;
+  }
+  if (providerLower === 'anthropic') {
+    return env.ANTHROPIC_API_KEY;
+  }
+  return undefined;
 }
 
 /**

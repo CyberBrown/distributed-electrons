@@ -91,7 +91,7 @@ export class AppError extends Error {
   /**
    * Format error for API response
    */
-  toResponse(requestId?: string): Record<string, any> {
+  toResponse(requestId?: string): { error: string; error_code: string; details?: Record<string, any>; request_id?: string } {
     return {
       error: this.message,
       error_code: this.code,
@@ -146,7 +146,7 @@ export class RateLimitError extends AppError {
     this.retryAfter = retryAfter;
   }
 
-  toResponse(requestId?: string): Record<string, any> {
+  toResponse(requestId?: string): { error: string; error_code: string; details?: Record<string, any>; request_id?: string; retry_after: number } {
     return {
       ...super.toResponse(requestId),
       retry_after: this.retryAfter,

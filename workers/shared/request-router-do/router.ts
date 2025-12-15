@@ -19,8 +19,6 @@ import type {
   RouterState,
   RouterResponse,
   ProcessingNotification,
-  RequestStatus,
-  TaskType,
 } from './types';
 import { classifyQuery, classifyWithType, getEstimatedProcessingTime } from './classifier';
 
@@ -249,7 +247,7 @@ export class RequestRouter implements DurableObject {
     this.requests.set(intake.id, queuedRequest);
 
     // Add to provider queue
-    const providerKey = queuedRequest.provider;
+    const providerKey = queuedRequest.provider || 'default';
     let providerQueue = this.providerQueues.get(providerKey);
 
     if (!providerQueue) {
@@ -449,7 +447,7 @@ export class RequestRouter implements DurableObject {
   async processQueues(): Promise<void> {
     const notifications: ProcessingNotification[] = [];
 
-    for (const [providerKey, queue] of this.providerQueues) {
+    for (const [_providerKey, queue] of this.providerQueues) {
       // Reset rate limits if minute has passed
       const now = Date.now();
       if (now - queue.rate_limit.last_reset > 60000) {
@@ -592,7 +590,7 @@ export class RequestRouter implements DurableObject {
 
 // Export as module worker (for standalone deployment if needed)
 export default {
-  async fetch(request: Request, env: any): Promise<Response> {
+  async fetch(_request: Request, _env: unknown): Promise<Response> {
     return new Response('Request Router DO - Use Durable Object bindings', { status: 200 });
   },
 };

@@ -22,13 +22,13 @@ export class RateLimiter implements DurableObject {
 
     try {
       if (path === '/check' && request.method === 'POST') {
-        const body = await request.json();
+        const body = await request.json() as { config: RateLimitConfig };
         const result = await this.checkLimit(body.config);
         return Response.json(result);
       }
 
       if (path === '/record' && request.method === 'POST') {
-        const body = await request.json();
+        const body = await request.json() as { tokens?: number };
         await this.recordRequest(body.tokens || 0);
         return Response.json({ success: true });
       }
@@ -171,7 +171,7 @@ export class RateLimiter implements DurableObject {
 
 // Export as module worker
 export default {
-  async fetch(request: Request, env: any): Promise<Response> {
+  async fetch(_request: Request, _env: unknown): Promise<Response> {
     return new Response('Rate Limiter Worker - Use Durable Object bindings', { status: 200 });
   },
 };

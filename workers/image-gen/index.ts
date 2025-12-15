@@ -3,8 +3,7 @@
  * Main worker that orchestrates image generation workflow
  */
 
-import { providerRegistry, DynamicAdapter } from '../shared/provider-adapters';
-import type { DynamicAdapterConfig } from '../shared/provider-adapters';
+import { providerRegistry } from '../shared/provider-adapters';
 import { checkAndRecordRequest } from '../shared/rate-limiter';
 import {
   uploadImage,
@@ -347,41 +346,6 @@ async function handleGenerate(
       requestId,
       500
     );
-  }
-}
-
-/**
- * Fetch model configuration from config service
- */
-async function getModelConfig(modelId: string, env: Env): Promise<any> {
-  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
-
-  try {
-    console.log(`Fetching model config for ${modelId} from ${configServiceUrl}`);
-
-    const response = await fetch(`${configServiceUrl}/model-config/${modelId}`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.log(`Model config not found for ${modelId} - will use legacy mode`);
-      } else {
-        console.error(`Failed to fetch model config for ${modelId}:`, response.status, response.statusText);
-      }
-      return null;
-    }
-
-    const result = await response.json();
-    console.log(`Successfully fetched model config for ${modelId}`);
-
-    // The config service returns data in a wrapper object
-    return result.data || result;
-  } catch (error) {
-    console.error(`Error fetching model config for ${modelId}:`, error);
-    return null;
   }
 }
 

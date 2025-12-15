@@ -64,7 +64,7 @@ export class IdeogramAdapter extends ProviderAdapter {
       throw await this.handleError(response);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { job_id: string };
     // Return the job_id from the response
     return data.job_id;
   }
@@ -81,7 +81,7 @@ export class IdeogramAdapter extends ProviderAdapter {
       throw await this.handleError(response);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { status: string; progress?: number; error?: string };
 
     return {
       status: this.mapStatus(data.status),
@@ -102,7 +102,13 @@ export class IdeogramAdapter extends ProviderAdapter {
       throw await this.handleError(response);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      image_url: string;
+      model?: string;
+      resolution?: string;
+      format?: string;
+      generation_time_ms?: number;
+    };
 
     return {
       image_url: data.image_url,
@@ -139,7 +145,7 @@ export class IdeogramAdapter extends ProviderAdapter {
     let retryAfter: number | undefined;
 
     try {
-      const errorData = await response.json();
+      const errorData = await response.json() as Record<string, any>;
       errorMessage = errorData.error || errorData.message || errorMessage;
       errorCode = errorData.error_code || errorCode;
     } catch {

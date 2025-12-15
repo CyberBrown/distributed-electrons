@@ -65,6 +65,14 @@ export async function authenticateRequest(
     // Hash the API key for database lookup
     const keyHash = await hashApiKey(apiKey);
 
+    // Check if DB is available
+    if (!env.DB) {
+      return {
+        authorized: false,
+        error: 'Database not configured',
+      };
+    }
+
     // Look up the API key in the database
     // The api_keys table links keys to users/projects, and users have instance access
     const result = await env.DB.prepare(`

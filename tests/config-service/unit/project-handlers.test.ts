@@ -48,7 +48,7 @@ describe('Project Handlers', () => {
       });
 
       const response = await createProject(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data).toBeDefined();
@@ -86,7 +86,7 @@ describe('Project Handlers', () => {
       });
 
       const response = await createProject(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data.description).toBeNull();
@@ -106,7 +106,7 @@ describe('Project Handlers', () => {
       });
 
       const response = await createProject(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error).toContain('Missing required fields');
@@ -125,7 +125,7 @@ describe('Project Handlers', () => {
       });
 
       const response = await createProject(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('Instance not found');
@@ -147,7 +147,7 @@ describe('Project Handlers', () => {
       mockDB._setData('projects', [testProject]);
 
       const response = await getProject('proj-123', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data.project_id).toBe('proj-123');
@@ -157,7 +157,7 @@ describe('Project Handlers', () => {
 
     it('should return 404 for non-existent project', async () => {
       const response = await getProject('non-existent', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('Project not found');
@@ -190,7 +190,7 @@ describe('Project Handlers', () => {
       mockDB._setData('projects', testProjects);
 
       const response = await listProjects(null, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data).toHaveLength(2);
@@ -221,7 +221,7 @@ describe('Project Handlers', () => {
       mockDB._setData('projects', testProjects);
 
       const response = await listProjects('inst-123', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data).toHaveLength(1);
@@ -271,7 +271,7 @@ describe('Project Handlers', () => {
       });
 
       const response = await updateProject('non-existent', request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('Project not found');
@@ -297,7 +297,7 @@ describe('Project Handlers', () => {
       });
 
       const response = await updateProject('proj-123', request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error).toBe('No fields to update');
@@ -319,7 +319,7 @@ describe('Project Handlers', () => {
       mockDB._setData('projects', [testProject]);
 
       const response = await deleteProject('proj-123', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data.deleted).toBe(true);
@@ -328,7 +328,7 @@ describe('Project Handlers', () => {
 
     it('should return 404 for non-existent project', async () => {
       const response = await deleteProject('non-existent', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('Project not found');

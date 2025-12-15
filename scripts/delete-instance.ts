@@ -84,7 +84,7 @@ async function deleteWorkers(instanceId: string): Promise<void> {
   console.log('');
 }
 
-async function deleteR2Bucket(instanceId: string): Promise<void> {
+async function deleteR2Bucket(_instanceId: string): Promise<void> {
   console.log('📦 Deleting R2 bucket...');
 
   try {
@@ -132,4 +132,5 @@ if (require.main === module) {
   deleteInstance(options);
 }
 
-export { deleteInstance, DeleteOptions };
+export { deleteInstance };
+export type { DeleteOptions };

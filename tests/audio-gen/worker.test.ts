@@ -36,7 +36,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('healthy');
@@ -64,7 +64,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -79,7 +79,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('INVALID_REQUEST');
@@ -95,7 +95,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error_code).toBe('TEXT_TOO_LONG');
@@ -127,7 +127,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       expect(typeof data.request_id).toBe('string');
@@ -144,7 +144,7 @@ describe('Audio Generation Worker', () => {
 
       expect(response.headers.get('X-Request-ID')).toBeDefined();
       expect(response.headers.get('X-Request-ID')).toBe(
-        (await response.clone().json()).request_id
+        ((await response.clone().json()) as Record<string, any>).request_id
       );
     });
 
@@ -164,8 +164,8 @@ describe('Audio Generation Worker', () => {
       const response1 = await worker.fetch(request1, mockEnv);
       const response2 = await worker.fetch(request2, mockEnv);
 
-      const data1 = await response1.json();
-      const data2 = await response2.json();
+      const data1 = await response1.json() as Record<string, any>;
+      const data2 = await response2.json() as Record<string, any>;
 
       expect(data1.request_id).not.toBe(data2.request_id);
     });
@@ -178,7 +178,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('ROUTE_NOT_FOUND');
@@ -193,7 +193,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(data.error).toBeDefined();
@@ -223,7 +223,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, envWithoutKey);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(500);
       expect(data.error_code).toBe('MISSING_API_KEY');
@@ -348,7 +348,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, envWithoutKey);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(500);
       expect(data.error_code).toBe('MISSING_API_KEY');
@@ -360,7 +360,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
     });
@@ -375,7 +375,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error_code).toBe('NOT_FOUND');
@@ -455,7 +455,7 @@ describe('Audio Generation Worker', () => {
       });
 
       const response = await worker.fetch(request, mockEnv);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.timestamp).toBeDefined();
       expect(new Date(data.timestamp).toISOString()).toBe(data.timestamp);

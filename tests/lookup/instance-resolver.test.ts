@@ -14,7 +14,7 @@ import {
 } from '../../infrastructure/lookup/types';
 
 // Mock KV namespace (reuse from cache.test.ts)
-class MockKVNamespace implements KVNamespace {
+class MockKVNamespace {
   private store = new Map<string, { value: string; expiration?: number }>();
 
   async get(key: string, options?: any): Promise<any> {
@@ -51,8 +51,6 @@ class MockKVNamespace implements KVNamespace {
   }
 
   getWithMetadata = vi.fn();
-  put = this.put.bind(this);
-  delete = this.delete.bind(this);
 }
 
 describe('InstanceResolver', () => {

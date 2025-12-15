@@ -35,7 +35,7 @@ describe('User Handlers', () => {
       });
 
       const response = await createUser(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data).toBeDefined();
@@ -61,7 +61,7 @@ describe('User Handlers', () => {
       });
 
       const response = await createUser(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data.role).toBe('user');
@@ -80,7 +80,7 @@ describe('User Handlers', () => {
       });
 
       const response = await createUser(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error).toContain('Missing required fields');
@@ -112,7 +112,7 @@ describe('User Handlers', () => {
       });
 
       const response = await createUser(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(409);
       expect(data.error).toBe('User with this email already exists');
@@ -134,7 +134,7 @@ describe('User Handlers', () => {
       mockDB._setData('users', [testUser]);
 
       const response = await getUser('user-123', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data.user_id).toBe('user-123');
@@ -143,7 +143,7 @@ describe('User Handlers', () => {
 
     it('should return 404 for non-existent user', async () => {
       const response = await getUser('non-existent', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('User not found');
@@ -165,7 +165,7 @@ describe('User Handlers', () => {
       mockDB._setData('users', [testUser]);
 
       const response = await getUserByEmail('test@example.com', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data.email).toBe('test@example.com');
@@ -174,7 +174,7 @@ describe('User Handlers', () => {
 
     it('should return 404 for non-existent email', async () => {
       const response = await getUserByEmail('nonexistent@example.com', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('User not found');
@@ -207,7 +207,7 @@ describe('User Handlers', () => {
       mockDB._setData('users', testUsers);
 
       const response = await listUsers(null, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data).toHaveLength(2);
@@ -238,7 +238,7 @@ describe('User Handlers', () => {
       mockDB._setData('users', testUsers);
 
       const response = await listUsers('org-123', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data).toHaveLength(1);
@@ -287,7 +287,7 @@ describe('User Handlers', () => {
       });
 
       const response = await updateUser('non-existent', request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('User not found');
@@ -313,7 +313,7 @@ describe('User Handlers', () => {
       });
 
       const response = await updateUser('user-123', request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(400);
       expect(data.error).toBe('No fields to update');
@@ -354,7 +354,7 @@ describe('User Handlers', () => {
       });
 
       const response = await updateUser('user-123', request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(409);
       expect(data.error).toBe('Email already in use by another user');
@@ -376,7 +376,7 @@ describe('User Handlers', () => {
       mockDB._setData('users', [testUser]);
 
       const response = await deleteUser('user-123', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.data.deleted).toBe(true);
@@ -385,7 +385,7 @@ describe('User Handlers', () => {
 
     it('should return 404 for non-existent user', async () => {
       const response = await deleteUser('non-existent', env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('User not found');

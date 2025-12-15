@@ -57,4 +57,33 @@ export abstract class ProviderAdapter {
   getProviderName(): string {
     return this.providerName;
   }
+
+  /**
+   * Poll until a job completes or times out
+   */
+  async pollUntilComplete(
+    jobId: string,
+    apiKey: string,
+    timeoutMs: number = 60000,
+    pollIntervalMs: number = 2000
+  ): Promise<ImageResult> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      const status = await this.checkStatus(jobId, apiKey);
+
+      if (status.status === 'completed') {
+        return this.fetchResult(jobId, apiKey);
+      }
+
+      if (status.status === 'failed') {
+        throw new Error(`Job failed: ${status.error || 'Unknown error'}`);
+      }
+
+      // Wait before next poll
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new Error(`Job timed out after ${timeoutMs}ms`);
+  }
 }

@@ -16,7 +16,7 @@ describe('Config Service API Integration Tests', () => {
     it('should return healthy status', async () => {
       const request = new Request('http://localhost/health');
       const response = await worker.fetch(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('healthy');
@@ -26,7 +26,7 @@ describe('Config Service API Integration Tests', () => {
     it('should handle root path', async () => {
       const request = new Request('http://localhost/');
       const response = await worker.fetch(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('healthy');
@@ -68,7 +68,7 @@ describe('Config Service API Integration Tests', () => {
       });
 
       const createResponse = await worker.fetch(createRequest, env);
-      const createData = await createResponse.json();
+      const createData = await createResponse.json() as Record<string, any>;
 
       expect(createResponse.status).toBe(200);
       expect(createData.data.instance_id).toBeDefined();
@@ -78,7 +78,7 @@ describe('Config Service API Integration Tests', () => {
       // 2. Get instance
       const getRequest = new Request(`http://localhost/instance/${instanceId}`);
       const getResponse = await worker.fetch(getRequest, env);
-      const getData = await getResponse.json();
+      const getData = await getResponse.json() as Record<string, any>;
 
       expect(getResponse.status).toBe(200);
       expect(getData.data.instance_id).toBe(instanceId);
@@ -102,7 +102,7 @@ describe('Config Service API Integration Tests', () => {
       });
 
       const deleteResponse = await worker.fetch(deleteRequest, env);
-      const deleteData = await deleteResponse.json();
+      const deleteData = await deleteResponse.json() as Record<string, any>;
 
       expect(deleteResponse.status).toBe(200);
       expect(deleteData.data.deleted).toBe(true);
@@ -137,7 +137,7 @@ describe('Config Service API Integration Tests', () => {
       // List all
       const listAllRequest = new Request('http://localhost/instance');
       const listAllResponse = await worker.fetch(listAllRequest, env);
-      const listAllData = await listAllResponse.json();
+      const listAllData = await listAllResponse.json() as Record<string, any>;
 
       expect(listAllResponse.status).toBe(200);
       expect(listAllData.data).toHaveLength(2);
@@ -145,7 +145,7 @@ describe('Config Service API Integration Tests', () => {
       // List filtered
       const listFilteredRequest = new Request('http://localhost/instance?org_id=org-1');
       const listFilteredResponse = await worker.fetch(listFilteredRequest, env);
-      const listFilteredData = await listFilteredResponse.json();
+      const listFilteredData = await listFilteredResponse.json() as Record<string, any>;
 
       expect(listFilteredResponse.status).toBe(200);
       expect(listFilteredData.data).toHaveLength(1);
@@ -168,7 +168,7 @@ describe('Config Service API Integration Tests', () => {
       });
 
       const createResponse = await worker.fetch(createRequest, env);
-      const createData = await createResponse.json();
+      const createData = await createResponse.json() as Record<string, any>;
 
       expect(createResponse.status).toBe(200);
       expect(createData.data.user_id).toBeDefined();
@@ -178,7 +178,7 @@ describe('Config Service API Integration Tests', () => {
       // 2. Get user
       const getRequest = new Request(`http://localhost/user/${userId}`);
       const getResponse = await worker.fetch(getRequest, env);
-      const getData = await getResponse.json();
+      const getData = await getResponse.json() as Record<string, any>;
 
       expect(getResponse.status).toBe(200);
       expect(getData.data.user_id).toBe(userId);
@@ -187,7 +187,7 @@ describe('Config Service API Integration Tests', () => {
       // 3. Get user by email
       const getByEmailRequest = new Request('http://localhost/user/email/test@example.com');
       const getByEmailResponse = await worker.fetch(getByEmailRequest, env);
-      const getByEmailData = await getByEmailResponse.json();
+      const getByEmailData = await getByEmailResponse.json() as Record<string, any>;
 
       expect(getByEmailResponse.status).toBe(200);
       expect(getByEmailData.data.user_id).toBe(userId);
@@ -210,7 +210,7 @@ describe('Config Service API Integration Tests', () => {
       });
 
       const deleteResponse = await worker.fetch(deleteRequest, env);
-      const deleteData = await deleteResponse.json();
+      const deleteData = await deleteResponse.json() as Record<string, any>;
 
       expect(deleteResponse.status).toBe(200);
       expect(deleteData.data.deleted).toBe(true);
@@ -243,7 +243,7 @@ describe('Config Service API Integration Tests', () => {
       });
 
       const duplicateResponse = await worker.fetch(duplicateRequest, env);
-      const duplicateData = await duplicateResponse.json();
+      const duplicateData = await duplicateResponse.json() as Record<string, any>;
 
       expect(duplicateResponse.status).toBe(409);
       expect(duplicateData.error).toBe('User with this email already exists');
@@ -265,7 +265,7 @@ describe('Config Service API Integration Tests', () => {
       });
 
       const createInstanceResponse = await worker.fetch(createInstanceRequest, env);
-      const createInstanceData = await createInstanceResponse.json();
+      const createInstanceData = await createInstanceResponse.json() as Record<string, any>;
       instanceId = createInstanceData.data.instance_id;
     });
 
@@ -283,7 +283,7 @@ describe('Config Service API Integration Tests', () => {
       });
 
       const createResponse = await worker.fetch(createRequest, env);
-      const createData = await createResponse.json();
+      const createData = await createResponse.json() as Record<string, any>;
 
       expect(createResponse.status).toBe(200);
       expect(createData.data.project_id).toBeDefined();
@@ -293,7 +293,7 @@ describe('Config Service API Integration Tests', () => {
       // 2. Get project
       const getRequest = new Request(`http://localhost/project/${projectId}`);
       const getResponse = await worker.fetch(getRequest, env);
-      const getData = await getResponse.json();
+      const getData = await getResponse.json() as Record<string, any>;
 
       expect(getResponse.status).toBe(200);
       expect(getData.data.project_id).toBe(projectId);
@@ -319,7 +319,7 @@ describe('Config Service API Integration Tests', () => {
       });
 
       const deleteResponse = await worker.fetch(deleteRequest, env);
-      const deleteData = await deleteResponse.json();
+      const deleteData = await deleteResponse.json() as Record<string, any>;
 
       expect(deleteResponse.status).toBe(200);
       expect(deleteData.data.deleted).toBe(true);
@@ -354,7 +354,7 @@ describe('Config Service API Integration Tests', () => {
       // List filtered by instance
       const listRequest = new Request(`http://localhost/project?instance_id=${instanceId}`);
       const listResponse = await worker.fetch(listRequest, env);
-      const listData = await listResponse.json();
+      const listData = await listResponse.json() as Record<string, any>;
 
       expect(listResponse.status).toBe(200);
       expect(listData.data).toHaveLength(2);
@@ -372,7 +372,7 @@ describe('Config Service API Integration Tests', () => {
       });
 
       const createResponse = await worker.fetch(createRequest, env);
-      const createData = await createResponse.json();
+      const createData = await createResponse.json() as Record<string, any>;
 
       expect(createResponse.status).toBe(404);
       expect(createData.error).toBe('Instance not found');
@@ -383,7 +383,7 @@ describe('Config Service API Integration Tests', () => {
     it('should return 404 for unknown routes', async () => {
       const request = new Request('http://localhost/unknown-route');
       const response = await worker.fetch(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('Route not found');
@@ -395,7 +395,7 @@ describe('Config Service API Integration Tests', () => {
         method: 'PATCH',
       });
       const response = await worker.fetch(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
       expect(data.error).toBe('Route not found');
@@ -404,7 +404,7 @@ describe('Config Service API Integration Tests', () => {
     it('should include request_id in all error responses', async () => {
       const request = new Request('http://localhost/instance/non-existent');
       const response = await worker.fetch(request, env);
-      const data = await response.json();
+      const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
       expect(typeof data.request_id).toBe('string');

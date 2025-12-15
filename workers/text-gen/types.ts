@@ -40,11 +40,14 @@ export interface ErrorResponse {
 export interface Env {
   // Bindings
   RATE_LIMITER?: DurableObjectNamespace;
+  DB?: D1Database;
+  PROVIDER_KEYS?: KVNamespace;
 
   // Environment variables
   DEFAULT_INSTANCE_ID?: string;
   DEFAULT_PROVIDER?: string;
   CONFIG_SERVICE_URL?: string; // Config Service URL
+  ENCRYPTION_KEY?: string;
 
   // API Keys (from secrets)
   OPENAI_API_KEY?: string;
@@ -122,4 +125,53 @@ export interface StreamEvent {
   done: boolean;
   request_id: string;
   error?: string;
+}
+
+/**
+ * Result of authentication check
+ */
+export interface AuthResult {
+  authorized: boolean;
+  instance_id?: string;
+  user_id?: string;
+  project_id?: string;
+  error?: string;
+}
+
+/**
+ * Result from text generation
+ */
+export interface TextGenerationResult {
+  text: string;
+  provider: string;
+  model: string;
+  tokens_used: number;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Options for text generation
+ */
+export interface GenerateOptions {
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  stream?: boolean;
+  system_prompt?: string;
+  [key: string]: any;
+}
+
+/**
+ * Prompt template for text generation
+ */
+export interface PromptTemplate {
+  template_id: string;
+  name: string;
+  template: string;
+  system_prompt?: string;
+  variables?: string[];
+  default_values?: Record<string, any>;
+  user_prompt_wrapper?: string;
+  default_temperature?: number;
+  default_max_tokens?: number;
 }

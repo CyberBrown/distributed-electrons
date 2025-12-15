@@ -2,7 +2,7 @@
  * Mock D1 Database for testing
  */
 
-export class MockD1Database implements D1Database {
+export class MockD1Database {
   private data: Map<string, any[]> = new Map();
 
   constructor() {
@@ -12,7 +12,7 @@ export class MockD1Database implements D1Database {
     this.data.set('projects', []);
   }
 
-  prepare(query: string): D1PreparedStatement {
+  prepare(query: string): MockD1PreparedStatement {
     return new MockD1PreparedStatement(query, this.data);
   }
 
@@ -20,11 +20,11 @@ export class MockD1Database implements D1Database {
     throw new Error('dump not implemented in mock');
   }
 
-  batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
+  batch<T = unknown>(_statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
     throw new Error('batch not implemented in mock');
   }
 
-  exec(query: string): Promise<D1ExecResult> {
+  exec(_query: string): Promise<D1ExecResult> {
     throw new Error('exec not implemented in mock');
   }
 
@@ -45,7 +45,7 @@ export class MockD1Database implements D1Database {
   }
 }
 
-class MockD1PreparedStatement implements D1PreparedStatement {
+class MockD1PreparedStatement {
   private bindings: any[] = [];
 
   constructor(
@@ -53,7 +53,7 @@ class MockD1PreparedStatement implements D1PreparedStatement {
     private data: Map<string, any[]>
   ) {}
 
-  bind(...values: any[]): D1PreparedStatement {
+  bind(...values: any[]): MockD1PreparedStatement {
     this.bindings = values;
     return this;
   }
@@ -255,7 +255,7 @@ class MockD1PreparedStatement implements D1PreparedStatement {
     return { success: true, results: [] as T[], meta: {} } as any;
   }
 
-  async raw<T = unknown>(options?: D1RawOptions): Promise<T[]> {
+  async raw<T = unknown>(_options?: { columnNames?: boolean }): Promise<T[]> {
     const result = await this.all<T>();
     return result.results;
   }

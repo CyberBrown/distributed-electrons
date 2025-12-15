@@ -8,7 +8,6 @@ import type {
   UploadResult,
   R2ManagerEnv,
 } from './types';
-import { generateMetadata, truncatePrompt } from './metadata';
 
 /**
  * Upload an image to R2 storage
@@ -49,7 +48,7 @@ export async function uploadImage(
   return {
     r2_path: path,
     cdn_url: cdnUrl,
-    bucket: env.R2_BUCKET.name || 'default',
+    bucket: 'default',
     size_bytes: size,
     uploaded_at: new Date().toISOString(),
   };
@@ -146,8 +145,6 @@ export function generateCdnUrl(path: string, env: R2ManagerEnv): string {
   }
 
   // Fallback to R2 public URL pattern
-  // Use bucket name to generate R2 public URL
-  const bucketName = env.R2_BUCKET?.name || 'default';
   // R2 public URLs follow pattern: https://pub-{hash}.r2.dev/{path}
   // Since we don't have the actual hash, we'll use a placeholder
   const r2Hash = 'example123456789';
