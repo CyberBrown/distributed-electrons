@@ -1,0 +1,40 @@
+# DE Workflows Worker Configuration
+# Cloudflare Workflows for long-running operations
+
+name = "de-workflows"
+main = "index.ts"
+compatibility_date = "2024-11-20"
+compatibility_flags = ["nodejs_compat"]
+
+# Worker settings
+workers_dev = true
+
+# VideoRenderWorkflow - handles Shotstack video rendering
+[[workflows]]
+name = "video-render-workflow"
+binding = "VIDEO_RENDER_WORKFLOW"
+class_name = "VideoRenderWorkflow"
+
+# D1 Database binding (shared DE database)
+[[d1_databases]]
+binding = "DB"
+database_name = "de-database"
+database_id = "7cff30a0-c974-4ede-b96a-c91dd2f0c870"
+
+# R2 bucket for video storage (optional - videos stored at Shotstack URL)
+# [[r2_buckets]]
+# binding = "R2_BUCKET"
+# bucket_name = "de-render-storage"
+
+# Environment Variables
+[vars]
+DELIVERY_URL = "https://delivery.distributedelectrons.com"
+SHOTSTACK_ENV = "stage"
+
+# Secrets (set via wrangler secret put):
+# - SHOTSTACK_API_KEY
+
+# Custom Domain (optional)
+# [[routes]]
+# pattern = "workflows.distributedelectrons.com"
+# custom_domain = true

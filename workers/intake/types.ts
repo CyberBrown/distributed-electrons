@@ -8,12 +8,79 @@ export interface Env {
   REQUEST_ROUTER: DurableObjectNamespace;
   RATE_LIMITER: DurableObjectNamespace;
 
+  // Cloudflare Workflows
+  VIDEO_RENDER_WORKFLOW: Workflow;
+
   // D1 Database
   DB: D1Database;
 
   // Environment variables
   CONFIG_SERVICE_URL: string;
   DEFAULT_INSTANCE_ID?: string;
+}
+
+// Workflow binding type (Cloudflare Workflows)
+export interface Workflow {
+  create(options: { id?: string; params: Record<string, unknown> }): Promise<WorkflowInstance>;
+  get(id: string): Promise<WorkflowInstance>;
+}
+
+export interface WorkflowInstance {
+  id: string;
+  status(): Promise<{ status: string; output?: unknown; error?: string }>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  terminate(): Promise<void>;
+  restart(): Promise<void>;
+}
+
+// Timeline types for video rendering (mirrors render-service types)
+export interface Timeline {
+  soundtrack?: {
+    src: string;
+    effect?: 'fadeIn' | 'fadeOut' | 'fadeInFadeOut';
+    volume?: number;
+  };
+  tracks: Track[];
+}
+
+export interface Track {
+  clips: Clip[];
+}
+
+export interface Clip {
+  asset: Asset;
+  start: number;
+  length: number;
+  fit?: 'crop' | 'cover' | 'contain' | 'none';
+  scale?: number;
+  position?: string;
+  offset?: { x: number; y: number };
+  transition?: { in?: string; out?: string };
+  effect?: string;
+  filter?: string;
+  opacity?: number;
+}
+
+export interface Asset {
+  type: 'video' | 'image' | 'audio' | 'title' | 'html';
+  src?: string;
+  text?: string;
+  html?: string;
+  css?: string;
+  width?: number;
+  height?: number;
+  background?: string;
+  color?: string;
+  trim?: number;
+  volume?: number;
+}
+
+export interface OutputConfig {
+  format?: 'mp4' | 'gif' | 'mp3';
+  resolution?: 'hd' | 'sd' | '1080' | '720' | '480';
+  fps?: number;
+  quality?: 'high' | 'medium' | 'low';
 }
 
 // Incoming request from client app
@@ -27,6 +94,9 @@ export interface IntakePayload {
   priority?: number;
   callback_url?: string;
   metadata?: Record<string, unknown>;
+  // Video rendering specific fields
+  timeline?: Timeline;
+  output?: OutputConfig;
 }
 
 // Response to client
@@ -36,6 +106,11 @@ export interface IntakeResponse {
   status?: string;
   queue_position?: number;
   estimated_wait_ms?: number;
+  // Workflow-specific fields
+  workflow_instance_id?: string;
+  workflow_name?: string;
+  message?: string;
+  // Error fields
   error?: string;
   error_code?: string;
 }
@@ -61,6 +136,9 @@ export interface StoredRequest {
   queued_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  // Workflow tracking fields (added in migration 005)
+  workflow_instance_id: string | null;
+  workflow_name: string | null;
 }
 
 // Error response

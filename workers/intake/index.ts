@@ -153,6 +153,75 @@ async function handleIntake(
       storedRequest.completed_at
     ).run();
 
+    // Check if this is a video render request - route to VideoRenderWorkflow
+    if (body.task_type === 'video' || body.timeline) {
+      // Validate timeline is present for video requests
+      if (!body.timeline) {
+        return createErrorResponse(
+          'Timeline is required for video rendering',
+          'MISSING_TIMELINE',
+          requestId,
+          400
+        );
+      }
+
+      try {
+        // Create VideoRenderWorkflow instance
+        const instance = await env.VIDEO_RENDER_WORKFLOW.create({
+          id: requestId,
+          params: {
+            request_id: requestId,
+            app_id: appId,
+            instance_id: instanceId,
+            timeline: body.timeline,
+            output: body.output,
+            callback_url: body.callback_url,
+          },
+        });
+
+        // Update D1 with workflow tracking info
+        await env.DB.prepare(`
+          UPDATE requests SET
+            status = 'processing',
+            workflow_instance_id = ?,
+            workflow_name = 'video-render-workflow',
+            started_at = ?
+          WHERE id = ?
+        `).bind(instance.id, now, requestId).run();
+
+        // Return success with workflow info
+        return Response.json({
+          success: true,
+          request_id: requestId,
+          status: 'processing',
+          workflow_instance_id: instance.id,
+          workflow_name: 'video-render-workflow',
+          message: 'Video render workflow started',
+        } as IntakeResponse, {
+          status: 202,
+          headers: { 'X-Request-ID': requestId },
+        });
+      } catch (error) {
+        console.error('Failed to start VideoRenderWorkflow:', error);
+
+        // Update D1 with error
+        await env.DB.prepare(`
+          UPDATE requests SET status = 'failed', error_message = ? WHERE id = ?
+        `).bind(
+          error instanceof Error ? error.message : 'Workflow creation failed',
+          requestId
+        ).run();
+
+        return createErrorResponse(
+          error instanceof Error ? error.message : 'Failed to start video render workflow',
+          'WORKFLOW_ERROR',
+          requestId,
+          500
+        );
+      }
+    }
+
+    // For non-video requests, continue with existing Router DO flow
     // Notify Request Router DO
     const routerId = env.REQUEST_ROUTER.idFromName('global-router');
     const router = env.REQUEST_ROUTER.get(routerId);

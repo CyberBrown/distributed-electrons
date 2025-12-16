@@ -12,7 +12,7 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "de-database"
-database_id = "placeholder-replace-with-actual-id"
+database_id = "7cff30a0-c974-4ede-b96a-c91dd2f0c870"
 
 # Request Router Durable Object (references the shared DO)
 [[durable_objects.bindings]]
@@ -25,6 +25,13 @@ script_name = "request-router"
 name = "RATE_LIMITER"
 class_name = "RateLimiter"
 script_name = "rate-limiter"
+
+# VideoRenderWorkflow (Cloudflare Workflow for video rendering)
+[[workflows]]
+name = "video-render-workflow"
+binding = "VIDEO_RENDER_WORKFLOW"
+class_name = "VideoRenderWorkflow"
+script_name = "de-workflows"
 
 # Environment Variables
 [vars]
