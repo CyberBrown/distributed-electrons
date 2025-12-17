@@ -1,0 +1,17 @@
+# Local development environment variables
+# Copy this to .dev.vars and fill in your values
+
+# ===========================================
+# SDK Mode (POST /execute/sdk) - Recommended
+# ===========================================
+# Cloudflare AI Gateway authorization token
+# This authenticates with your AI Gateway which has BYOK configured
+# Get this from: Cloudflare Dashboard > AI Gateway > de-gateway > Settings
+CF_AIG_TOKEN=your_cloudflare_ai_gateway_token_here
+
+# ===========================================
+# Sandbox Mode (POST /execute)
+# ===========================================
+# Anthropic API key for Claude Code CLI in sandbox container
+# Only needed if using sandbox/CLI mode
+ANTHROPIC_API_KEY=your_anthropic_api_key_here

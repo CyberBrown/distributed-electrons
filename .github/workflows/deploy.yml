@@ -105,6 +105,14 @@ jobs:
           command: deploy
           workingDirectory: './workers/delivery'
 
+      - name: Deploy Sandbox Executor Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+          workingDirectory: './workers/sandbox-executor'
+
       - name: Run smoke tests
         run: npm run test:e2e || echo "E2E tests not yet implemented"
         continue-on-error: true
