@@ -28,6 +28,7 @@ Multi-agent AI platform on Cloudflare Workers providing API services for AI-powe
 | stock-media | Pexels | https://stock-media.solamp.workers.dev | - |
 | render-service | Shotstack (sandbox) | https://render-service.solamp.workers.dev | de-render-storage |
 | image-gen | Ideogram | https://image-gen.solamp.workers.dev | - |
+| sandbox-executor | Claude, CF API, GitHub API | https://sandbox-executor.solamp.workers.dev | - |
 
 ### Cloudflare Secrets
 
@@ -38,6 +39,10 @@ cd workers/text-gen && npx wrangler secret put ANTHROPIC_API_KEY
 cd workers/audio-gen && npx wrangler secret put ELEVENLABS_API_KEY
 cd workers/stock-media && npx wrangler secret put PEXELS_API_KEY
 cd workers/render-service && npx wrangler secret put SHOTSTACK_API_KEY
+cd workers/sandbox-executor && npx wrangler secret put ANTHROPIC_API_KEY
+cd workers/sandbox-executor && npx wrangler secret put CLOUDFLARE_API_TOKEN
+cd workers/sandbox-executor && npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+cd workers/sandbox-executor && npx wrangler secret put GITHUB_PAT
 ```
 
 ### Shared Infrastructure (workers/shared/)
@@ -186,6 +191,12 @@ npx wrangler r2 object get {bucket-name}/{key} --remote
 - Supports multiple providers via `model` parameter format: `provider:model-name`
 - Default model: `claude-sonnet-4-20250514` (Anthropic)
 - Falls back to OpenAI if no provider specified
+
+### sandbox-executor
+- Executes Claude Code tasks and generates code
+- Can auto-deploy generated workers to Cloudflare via CF API
+- Can auto-commit generated code to GitHub via Git Data API
+- Endpoints: `/execute`, `/deploy`, `/github/commit`, `/health`
 
 ## Related Projects
 

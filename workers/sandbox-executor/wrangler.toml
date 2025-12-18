@@ -1,0 +1,44 @@
+# Sandbox Executor Worker Configuration
+# Executes Claude Code tasks and deploys generated code to CF/GitHub
+
+name = "sandbox-executor"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Worker settings
+workers_dev = true
+
+# Migration to remove the old Sandbox Durable Object class
+[[migrations]]
+tag = "v2"
+deleted_classes = ["Sandbox"]
+
+# Environment Variables
+[vars]
+SERVICE_NAME = "sandbox-executor"
+DEFAULT_TIMEOUT_SECONDS = "120"
+MAX_EXECUTION_TIME_MS = "300000"
+
+# Secrets (set with: bun wrangler secret put <NAME>)
+# Required:
+# - ANTHROPIC_API_KEY (for Claude Code execution)
+# - CLOUDFLARE_API_TOKEN (for worker deployment)
+# - CLOUDFLARE_ACCOUNT_ID (for worker deployment)
+# - GITHUB_PAT (for GitHub integration)
+
+# Optional R2 bucket for storing execution artifacts
+# [[r2_buckets]]
+# binding = "EXECUTION_STORAGE"
+# bucket_name = "de-execution-storage"
+
+# Rate Limiter Durable Object (optional)
+# [[durable_objects.bindings]]
+# name = "RATE_LIMITER"
+# class_name = "RateLimiter"
+# script_name = "rate-limiter"
+
+# Custom Domain (optional)
+# [[routes]]
+# pattern = "sandbox.distributedelectrons.com"
+# custom_domain = true
