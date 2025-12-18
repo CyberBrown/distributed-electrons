@@ -1,0 +1,44 @@
+# Sandbox Executor Worker Configuration
+# Executes Claude Agent SDK tasks in isolated Cloudflare Sandbox containers
+
+name = "sandbox-executor"
+main = "src/index.ts"
+compatibility_date = "2025-05-06"
+compatibility_flags = ["nodejs_compat"]
+
+# Worker settings
+workers_dev = true
+
+# Enable observability for debugging
+[observability]
+enabled = true
+
+# Container configuration for Sandbox SDK
+[[containers]]
+class_name = "Sandbox"
+image = "./Dockerfile"
+instance_type = "basic"
+
+# Durable Objects bindings for Sandbox
+[durable_objects]
+bindings = [
+  { name = "Sandbox", class_name = "Sandbox" }
+]
+
+# Database migrations for Durable Object
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sandbox"]
+
+# Environment Variables
+[vars]
+CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
+MAX_EXECUTION_TIME = "300000"
+
+# Secrets (set with: wrangler secret put <NAME>)
+# - ANTHROPIC_API_KEY
+
+# Custom Domain (uncomment when ready for production)
+# [[routes]]
+# pattern = "sandbox.distributedelectrons.com"
+# custom_domain = true
