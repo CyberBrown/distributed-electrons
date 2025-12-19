@@ -10,13 +10,12 @@
 // - MAX_EXECUTION_TIME: string
 // Additional properties not in wrangler.toml need to be declared here
 
-// Extend the generated Env with secrets and optional bindings
+// Extend the generated Env with additional optional bindings
+// Note: ANTHROPIC_API_KEY, GITHUB_PAT, etc. are defined in worker-configuration.d.ts
+// via `wrangler types` based on configured secrets
 export interface Env extends Cloudflare.Env {
-  // AI Gateway auth token (for SDK mode)
+  // AI Gateway auth token (for SDK mode) - optional, only needed for /execute/sdk
   CF_AIG_TOKEN?: string;
-
-  // Anthropic API key (for Sandbox mode - passed to container)
-  ANTHROPIC_API_KEY?: string;
 
   // Optional: Instance ID override
   DEFAULT_INSTANCE_ID?: string;
@@ -34,6 +33,12 @@ export interface ExecuteRequest {
 
   // Optional: Git repository to clone and work on
   repo?: string;
+
+  // Optional: Branch to work on (creates if doesn't exist)
+  branch?: string;
+
+  // Optional: Commit message for changes (if not provided, uses auto-generated message)
+  commit_message?: string;
 
   // Optional: Instance ID for multi-tenant scenarios
   instance_id?: string;
@@ -139,7 +144,22 @@ export interface ExecuteResponse {
     execution_time_ms: number;
     sandbox_id: string;
     repo?: string;
+    repo_created?: boolean;
+    branch?: string;
+    commit_sha?: string;
+    commit_url?: string;
+    pushed?: boolean;
   };
+}
+
+/**
+ * Result of git commit/push operation
+ */
+export interface GitCommitResult {
+  success: boolean;
+  sha?: string;
+  branch?: string;
+  error?: string;
 }
 
 /**
@@ -170,4 +190,13 @@ export interface CommandResult {
   stdout: string;
   stderr: string;
   exitCode?: number;
+}
+
+/**
+ * Options for creating a new GitHub repository
+ */
+export interface CreateRepoOptions {
+  description?: string;
+  private?: boolean;
+  autoInit?: boolean;
 }

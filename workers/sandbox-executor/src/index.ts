@@ -21,6 +21,8 @@ import type {
   CommandResult,
   SDKExecuteRequest,
   SDKExecuteResponse,
+  CreateRepoOptions,
+  GitCommitResult,
 } from './types';
 
 // Re-export Sandbox for Durable Object binding
@@ -66,6 +68,121 @@ function getOutput(result: CommandResult): string {
   return result.success ? result.stdout : result.stderr;
 }
 
+// ============================================================================
+// GitHub Repository Helpers
+// ============================================================================
+
+/**
+ * Sanitize a string for use as GitHub repo description
+ * Removes control characters, collapses whitespace, and truncates
+ */
+function sanitizeDescription(desc: string): string {
+  return desc
+    .replace(/[\n\r\t\x00-\x1F\x7F]/g, ' ') // Replace control chars with spaces
+    .replace(/\s+/g, ' ') // Collapse multiple spaces
+    .trim()
+    .slice(0, 350); // GitHub limit is 350 chars
+}
+
+/**
+ * Common headers for GitHub API requests
+ */
+function getGitHubHeaders(env: Env): Record<string, string> {
+  return {
+    Authorization: `token ${env.GITHUB_PAT}`,
+    Accept: 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json',
+    'User-Agent': 'sandbox-executor',
+  };
+}
+
+/**
+ * Check if a GitHub repository exists
+ */
+async function checkRepoExists(owner: string, repo: string, env: Env): Promise<boolean> {
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+    headers: getGitHubHeaders(env),
+  });
+  return response.status === 200;
+}
+
+/**
+ * Check if an owner is an organization (vs a user)
+ */
+async function checkIfOrg(owner: string, env: Env): Promise<boolean> {
+  const response = await fetch(`https://api.github.com/users/${owner}`, {
+    headers: getGitHubHeaders(env),
+  });
+  if (response.ok) {
+    const data = (await response.json()) as { type: string };
+    return data.type === 'Organization';
+  }
+  return false;
+}
+
+/**
+ * Create a new GitHub repository
+ * Uses different endpoints for org vs user repos
+ */
+async function createRepo(
+  owner: string,
+  repo: string,
+  env: Env,
+  options: CreateRepoOptions = {}
+): Promise<void> {
+  const isOrg = await checkIfOrg(owner, env);
+
+  // Different endpoints for org vs user repos
+  const url = isOrg
+    ? `https://api.github.com/orgs/${owner}/repos`
+    : `https://api.github.com/user/repos`;
+
+  const description = sanitizeDescription(options.description || 'Created by sandbox-executor');
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getGitHubHeaders(env),
+    body: JSON.stringify({
+      name: repo,
+      description,
+      private: options.private ?? false,
+      auto_init: options.autoInit ?? true, // Creates default branch with README
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to create repo ${owner}/${repo}: ${response.status} - ${error}`);
+  }
+
+  console.log(`Created repo: ${owner}/${repo}`);
+}
+
+/**
+ * Ensure a GitHub repository exists, creating it if needed
+ * Returns whether a new repo was created
+ */
+async function ensureRepoExists(
+  owner: string,
+  repo: string,
+  env: Env,
+  options?: CreateRepoOptions
+): Promise<{ created: boolean }> {
+  const exists = await checkRepoExists(owner, repo, env);
+
+  if (!exists) {
+    console.log(`Repo ${owner}/${repo} not found, creating...`);
+    await createRepo(owner, repo, env, options);
+
+    // Brief delay for GitHub to initialize the repo fully
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    return { created: true };
+  }
+
+  return { created: false };
+}
+
 /**
  * Main worker entry point
  */
@@ -106,7 +223,7 @@ export default {
           status: 'healthy',
           service: 'sandbox-executor',
           timestamp: new Date().toISOString(),
-          version: '1.1.0',
+          version: '1.4.1',
         };
         return addCorsHeaders(Response.json(healthResponse));
       }
@@ -308,18 +425,93 @@ async function handleExecute(
     // Set environment variables in sandbox
     await sandbox.setEnvVars({
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      GITHUB_PAT: env.GITHUB_PAT, // For git push authentication
     });
 
     // Determine working directory and setup
-    let workingDir = body.options?.working_dir || '/tmp/workspace';
+    // Use absolute paths to ensure consistency
+    const baseDir = '/home/user';
+    let workingDir = body.options?.working_dir || `${baseDir}/workspace`;
+    let repoCreated = false;
 
-    // If repo is provided, clone it
+    // If repo is provided, ensure it exists and clone it
     if (body.repo) {
-      const repoName = body.repo.split('/').pop() || 'repo';
-      await sandbox.gitCheckout(body.repo, { targetDir: repoName });
-      workingDir = repoName;
+      // Parse repo - can be "owner/repo" or full URL
+      const repoPath = body.repo.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+      const [owner, repoName] = repoPath.split('/');
+
+      if (!owner || !repoName) {
+        return createErrorResponse(
+          'Invalid repo format. Expected "owner/repo" or GitHub URL',
+          'INVALID_REPO_FORMAT',
+          requestId,
+          400
+        );
+      }
+
+      // Ensure repo exists (create if needed) - requires GITHUB_PAT
+      if (env.GITHUB_PAT) {
+        console.log(`Checking if repo ${owner}/${repoName} exists...`);
+        const { created } = await ensureRepoExists(owner, repoName, env, {
+          description: `Scaffolded by sandbox-executor for task: ${body.task.slice(0, 100)}`,
+          private: false,
+          autoInit: true,
+        });
+        repoCreated = created;
+        if (created) {
+          console.log(`New repo created: ${owner}/${repoName}`);
+        } else {
+          console.log(`Repo ${owner}/${repoName} already exists`);
+        }
+      } else {
+        console.log('GITHUB_PAT not configured, skipping repo existence check');
+      }
+
+      // Clone the repo using absolute path
+      const cloneDir = `${baseDir}/${repoName}`;
+
+      // Use authenticated URL for clone if GITHUB_PAT is available
+      // This is required for private repos or newly created repos
+      const repoUrl = env.GITHUB_PAT
+        ? `https://x-access-token:${env.GITHUB_PAT}@github.com/${owner}/${repoName}.git`
+        : `https://github.com/${owner}/${repoName}`;
+
+      console.log(`Cloning ${owner}/${repoName} to ${cloneDir} (authenticated: ${!!env.GITHUB_PAT})`);
+
+      // Use git clone directly instead of sandbox.gitCheckout for authenticated URLs
+      const cloneResult = await sandbox.exec(
+        `git clone "${repoUrl}" "${cloneDir}"`
+      ) as CommandResult;
+
+      if (!cloneResult.success) {
+        const cloneError = getOutput(cloneResult);
+        console.error(`Clone failed: ${cloneError}`);
+        throw new Error(`Failed to clone repository: ${cloneError}`);
+      }
+      console.log(`Clone successful`);
+
+      // Set workingDir to the absolute clone path
+      workingDir = cloneDir;
+      console.log(`Working directory set to: ${workingDir}`);
+
+      // Configure git user for commits
+      console.log('Configuring git user...');
+      await sandbox.exec(`cd ${workingDir} && git config user.email "sandbox-executor@distributedelectrons.com"`);
+      await sandbox.exec(`cd ${workingDir} && git config user.name "Sandbox Executor"`);
+      console.log('Git user configured');
+
+      // If branch specified, create/checkout branch
+      if (body.branch) {
+        console.log(`Switching to branch: ${body.branch}`);
+        // Try to checkout existing branch, or create new one
+        const checkoutResult = await sandbox.exec(
+          `cd ${workingDir} && git checkout ${body.branch} 2>/dev/null || git checkout -b ${body.branch}`
+        ) as CommandResult;
+        console.log(`Branch checkout result: ${getOutput(checkoutResult)}`);
+      }
     } else {
       // Create workspace directory
+      console.log(`Creating workspace directory: ${workingDir}`);
       await sandbox.exec(`mkdir -p ${workingDir}`);
     }
 
@@ -344,13 +536,107 @@ async function handleExecute(
     // Get git diff if repo was provided and diff is requested
     let diff: string | undefined;
     if (body.repo && body.options?.include_diff !== false) {
+      // Get diff including untracked files
       const diffResult = (await sandbox.exec(
-        `cd ${workingDir} && git diff`
+        `cd ${workingDir} && git diff && git diff --cached`
       )) as CommandResult;
       diff = getOutput(diffResult);
     }
 
+    // Git commit and push if repo was provided and GITHUB_PAT is available
+    let commitResult: GitCommitResult | undefined;
+    if (body.repo && env.GITHUB_PAT) {
+      console.log('Starting git commit/push flow...');
+
+      // Check if there are any changes to commit
+      const statusResult = (await sandbox.exec(
+        `cd ${workingDir} && git status --porcelain`
+      )) as CommandResult;
+      const statusOutput = getOutput(statusResult);
+      console.log(`Git status: ${statusOutput}`);
+
+      if (statusOutput.trim()) {
+        // There are changes to commit
+        console.log('Changes detected, committing...');
+
+        // Stage all changes including new files
+        const addResult = (await sandbox.exec(
+          `cd ${workingDir} && git add -A`
+        )) as CommandResult;
+        console.log(`Git add result: success=${addResult.success}`);
+
+        // Generate commit message
+        const commitMessage = body.commit_message || `chore: sandbox-executor task - ${body.task.slice(0, 50)}`;
+        const escapedMessage = commitMessage.replace(/"/g, '\\"');
+
+        // Commit
+        const commitCmd = `cd ${workingDir} && git commit -m "${escapedMessage}"`;
+        const commitExecResult = (await sandbox.exec(commitCmd)) as CommandResult;
+        const commitOutput = getOutput(commitExecResult);
+        console.log(`Git commit result: ${commitOutput}`);
+
+        if (commitExecResult.success) {
+          // Get the commit SHA
+          const shaResult = (await sandbox.exec(
+            `cd ${workingDir} && git rev-parse HEAD`
+          )) as CommandResult;
+          const sha = getOutput(shaResult).trim();
+
+          // Get current branch name
+          const branchResult = (await sandbox.exec(
+            `cd ${workingDir} && git rev-parse --abbrev-ref HEAD`
+          )) as CommandResult;
+          const currentBranch = getOutput(branchResult).trim();
+
+          // Push to remote
+          console.log(`Pushing to origin/${currentBranch}...`);
+          const pushResult = (await sandbox.exec(
+            `cd ${workingDir} && git push -u origin ${currentBranch}`
+          )) as CommandResult;
+          const pushOutput = getOutput(pushResult);
+          console.log(`Git push result: success=${pushResult.success}, output=${pushOutput}`);
+
+          if (pushResult.success) {
+            commitResult = {
+              success: true,
+              sha,
+              branch: currentBranch,
+            };
+            console.log(`Successfully pushed commit ${sha} to ${currentBranch}`);
+          } else {
+            commitResult = {
+              success: false,
+              sha,
+              branch: currentBranch,
+              error: `Push failed: ${pushOutput}`,
+            };
+            console.error(`Push failed: ${pushOutput}`);
+          }
+        } else {
+          commitResult = {
+            success: false,
+            error: `Commit failed: ${commitOutput}`,
+          };
+          console.error(`Commit failed: ${commitOutput}`);
+        }
+      } else {
+        console.log('No changes to commit');
+        commitResult = {
+          success: true,
+          error: 'No changes to commit',
+        };
+      }
+    }
+
     const executionTime = Date.now() - startTime;
+
+    // Parse repo for response metadata
+    let repoOwner: string | undefined;
+    let repoNameForUrl: string | undefined;
+    if (body.repo) {
+      const repoPath = body.repo.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+      [repoOwner, repoNameForUrl] = repoPath.split('/');
+    }
 
     // Build response
     const response: ExecuteResponse = {
@@ -363,6 +649,13 @@ async function handleExecute(
         execution_time_ms: executionTime,
         sandbox_id: sandboxId,
         repo: body.repo,
+        repo_created: repoCreated,
+        branch: commitResult?.branch,
+        commit_sha: commitResult?.sha,
+        commit_url: commitResult?.sha && repoOwner && repoNameForUrl
+          ? `https://github.com/${repoOwner}/${repoNameForUrl}/commit/${commitResult.sha}`
+          : undefined,
+        pushed: commitResult?.success,
       },
     };
 
