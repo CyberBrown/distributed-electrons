@@ -75,6 +75,16 @@ const DEFAULT_RATE_LIMITS: Record<string, ProviderRateLimit> = {
     current_concurrent: 0,
     last_reset: Date.now(),
   },
+  // Sandbox executor (Claude Code with OAuth) - uses Claude.ai Max subscription
+  // Lower concurrency due to container overhead
+  'sandbox-executor': {
+    provider: 'sandbox-executor',
+    requests_per_minute: 20,
+    concurrent_requests: 3,
+    current_rpm: 0,
+    current_concurrent: 0,
+    last_reset: Date.now(),
+  },
 };
 
 export class RequestRouter implements DurableObject {

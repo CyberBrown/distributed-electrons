@@ -44,21 +44,26 @@ const SUBTASK_PATTERNS: Record<string, RegExp[]> = {
 };
 
 // Default provider/model mappings
+// Using 'sandbox-executor' for text tasks to leverage Claude Code CLI with OAuth
+// This avoids API usage costs by using Claude.ai Max subscription
 const DEFAULT_ROUTING: Record<TaskType, { provider: string; model: string }> = {
-  text: { provider: 'anthropic', model: 'claude-3-5-sonnet' },
+  text: { provider: 'sandbox-executor', model: 'claude-code' },
   image: { provider: 'ideogram', model: 'ideogram-v2' },
   audio: { provider: 'elevenlabs', model: 'eleven_multilingual_v2' },
   video: { provider: 'shotstack', model: 'default' },
   context: { provider: 'gemini', model: 'gemini-context' },
-  unknown: { provider: 'anthropic', model: 'claude-3-5-haiku' },
+  unknown: { provider: 'sandbox-executor', model: 'claude-code' },
 };
 
 // Subtask-specific routing overrides
+// All text subtasks now use sandbox-executor (Claude Code with OAuth)
 const SUBTASK_ROUTING: Record<string, { provider: string; model: string }> = {
   'image:illustration': { provider: 'gemini', model: 'gemini-nano-banana' },
   'image:photo-realistic': { provider: 'ideogram', model: 'ideogram-v2' },
-  'text:fast': { provider: 'anthropic', model: 'claude-3-5-haiku' },
-  'text:code': { provider: 'anthropic', model: 'claude-3-5-sonnet' },
+  'text:fast': { provider: 'sandbox-executor', model: 'claude-code' },
+  'text:code': { provider: 'sandbox-executor', model: 'claude-code' },
+  'text:detailed': { provider: 'sandbox-executor', model: 'claude-code' },
+  'text:creative': { provider: 'sandbox-executor', model: 'claude-code' },
 };
 
 /**
@@ -182,6 +187,7 @@ export function getEstimatedProcessingTime(
   const estimates: Record<string, number> = {
     'text:anthropic': 2000,
     'text:openai': 1500,
+    'text:sandbox-executor': 30000, // Container startup + Claude Code execution
     'image:ideogram': 15000,
     'image:gemini': 10000,
     'audio:elevenlabs': 5000,

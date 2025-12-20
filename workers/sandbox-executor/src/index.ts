@@ -7,7 +7,10 @@
  * Endpoints:
  * - POST /execute/sdk - Execute using Anthropic SDK via AI Gateway (recommended)
  * - POST /execute - Execute using Claude Code CLI in sandbox container
+ * - POST /debug - Debug endpoint for testing container execution
  * - GET /health - Health check endpoint
+ *
+ * @version 1.6.0 - Added Claude OAuth support for Max subscription
  */
 
 import { getSandbox } from '@cloudflare/sandbox';
@@ -66,6 +69,59 @@ function getModelId(model?: string): string {
  */
 function getOutput(result: CommandResult): string {
   return result.success ? result.stdout : result.stderr;
+}
+
+/**
+ * Format command result for detailed logging
+ */
+function formatCommandResult(cmd: string, result: CommandResult): string {
+  return JSON.stringify({
+    command: cmd,
+    success: result.success,
+    exitCode: result.exitCode,
+    stdout: result.stdout?.slice(0, 1000) || '',
+    stderr: result.stderr?.slice(0, 1000) || '',
+    stdoutLength: result.stdout?.length || 0,
+    stderrLength: result.stderr?.length || 0,
+  }, null, 2);
+}
+
+/**
+ * Debug info interface for tracking execution steps
+ */
+interface DebugInfo {
+  steps: Array<{
+    step: string;
+    timestamp: string;
+    duration_ms?: number;
+    result?: unknown;
+    error?: string;
+  }>;
+  environment: {
+    has_anthropic_key: boolean;
+    has_github_pat: boolean;
+    has_oauth_credentials: boolean;
+    sandbox_id: string;
+  };
+}
+
+/**
+ * Add a debug step to tracking
+ */
+function addDebugStep(
+  debug: DebugInfo,
+  step: string,
+  result?: unknown,
+  error?: string,
+  startTime?: number
+): void {
+  debug.steps.push({
+    step,
+    timestamp: new Date().toISOString(),
+    duration_ms: startTime ? Date.now() - startTime : undefined,
+    result,
+    error,
+  });
 }
 
 // ============================================================================
@@ -218,12 +274,18 @@ export default {
         return addCorsHeaders(response);
       }
 
+      // Debug endpoint for testing container execution
+      if (url.pathname === '/debug' && request.method === 'POST') {
+        const response = await handleDebugExecute(request, env, requestId);
+        return addCorsHeaders(response);
+      }
+
       if (url.pathname === '/health' && request.method === 'GET') {
         const healthResponse: HealthResponse = {
           status: 'healthy',
           service: 'sandbox-executor',
           timestamp: new Date().toISOString(),
-          version: '1.4.1',
+          version: '1.6.0',
         };
         return addCorsHeaders(Response.json(healthResponse));
       }
@@ -385,6 +447,198 @@ async function handleSDKExecute(
 }
 
 /**
+ * Debug endpoint for testing container execution without Claude
+ * Tests: sandbox creation, env vars, basic commands, file operations
+ */
+async function handleDebugExecute(
+  request: Request,
+  env: Env,
+  requestId: string
+): Promise<Response> {
+  const startTime = Date.now();
+  const sandboxId = crypto.randomUUID().slice(0, 8);
+
+  const debug: DebugInfo = {
+    steps: [],
+    environment: {
+      has_anthropic_key: !!env.ANTHROPIC_API_KEY,
+      has_github_pat: !!env.GITHUB_PAT,
+      has_oauth_credentials: !!env.CLAUDE_OAUTH_CREDENTIALS,
+      sandbox_id: sandboxId,
+    },
+  };
+
+  try {
+    // Parse optional command from request body
+    let customCommand: string | undefined;
+    try {
+      const body = await request.json() as { command?: string };
+      customCommand = body.command;
+    } catch {
+      // No body or invalid JSON is fine
+    }
+
+    addDebugStep(debug, 'request_parsed', { customCommand });
+
+    // Step 1: Create sandbox
+    const sandboxStartTime = Date.now();
+    console.log(`[DEBUG ${requestId}] Creating sandbox ${sandboxId}...`);
+    const sandbox = getSandbox(env.Sandbox, sandboxId);
+    addDebugStep(debug, 'sandbox_created', { sandboxId }, undefined, sandboxStartTime);
+
+    // Step 2: Set environment variables
+    const envStartTime = Date.now();
+    console.log(`[DEBUG ${requestId}] Setting environment variables...`);
+    try {
+      await sandbox.setEnvVars({
+        ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY || 'not-set',
+        GITHUB_PAT: env.GITHUB_PAT || 'not-set',
+        DEBUG_MODE: 'true',
+      });
+      addDebugStep(debug, 'env_vars_set', { success: true }, undefined, envStartTime);
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      addDebugStep(debug, 'env_vars_set', null, errMsg, envStartTime);
+      console.error(`[DEBUG ${requestId}] Failed to set env vars: ${errMsg}`);
+    }
+
+    // Step 3: Test basic command - echo
+    const echoStartTime = Date.now();
+    console.log(`[DEBUG ${requestId}] Testing echo command...`);
+    const echoResult = await sandbox.exec('echo "Hello from sandbox"') as CommandResult;
+    console.log(`[DEBUG ${requestId}] Echo result: ${formatCommandResult('echo', echoResult)}`);
+    addDebugStep(debug, 'echo_test', {
+      success: echoResult.success,
+      exitCode: echoResult.exitCode,
+      stdout: echoResult.stdout,
+      stderr: echoResult.stderr,
+    }, undefined, echoStartTime);
+
+    // Step 4: Test pwd (working directory)
+    const pwdStartTime = Date.now();
+    console.log(`[DEBUG ${requestId}] Testing pwd command...`);
+    const pwdResult = await sandbox.exec('pwd') as CommandResult;
+    console.log(`[DEBUG ${requestId}] PWD result: ${formatCommandResult('pwd', pwdResult)}`);
+    addDebugStep(debug, 'pwd_test', {
+      success: pwdResult.success,
+      exitCode: pwdResult.exitCode,
+      stdout: pwdResult.stdout?.trim(),
+      stderr: pwdResult.stderr,
+    }, undefined, pwdStartTime);
+
+    // Step 5: Test environment variable access
+    const envCheckStartTime = Date.now();
+    console.log(`[DEBUG ${requestId}] Testing env var access...`);
+    const envCheckResult = await sandbox.exec('echo "ANTHROPIC_KEY_SET=$([[ -n $ANTHROPIC_API_KEY ]] && echo yes || echo no)"') as CommandResult;
+    console.log(`[DEBUG ${requestId}] Env check result: ${formatCommandResult('env_check', envCheckResult)}`);
+    addDebugStep(debug, 'env_var_access', {
+      success: envCheckResult.success,
+      exitCode: envCheckResult.exitCode,
+      stdout: envCheckResult.stdout?.trim(),
+      stderr: envCheckResult.stderr,
+    }, undefined, envCheckStartTime);
+
+    // Step 6: Test file creation
+    const fileStartTime = Date.now();
+    console.log(`[DEBUG ${requestId}] Testing file creation...`);
+    const fileResult = await sandbox.exec('echo "test content" > /tmp/debug-test.txt && cat /tmp/debug-test.txt') as CommandResult;
+    console.log(`[DEBUG ${requestId}] File result: ${formatCommandResult('file_test', fileResult)}`);
+    addDebugStep(debug, 'file_creation', {
+      success: fileResult.success,
+      exitCode: fileResult.exitCode,
+      stdout: fileResult.stdout?.trim(),
+      stderr: fileResult.stderr,
+    }, undefined, fileStartTime);
+
+    // Step 7: Check if Claude CLI is available
+    const claudeCheckStartTime = Date.now();
+    console.log(`[DEBUG ${requestId}] Checking Claude CLI availability...`);
+    const claudeCheckResult = await sandbox.exec('which claude || echo "claude not found"') as CommandResult;
+    console.log(`[DEBUG ${requestId}] Claude check result: ${formatCommandResult('which_claude', claudeCheckResult)}`);
+    addDebugStep(debug, 'claude_cli_check', {
+      success: claudeCheckResult.success,
+      exitCode: claudeCheckResult.exitCode,
+      stdout: claudeCheckResult.stdout?.trim(),
+      stderr: claudeCheckResult.stderr,
+      claude_available: claudeCheckResult.stdout?.includes('/claude') || false,
+    }, undefined, claudeCheckStartTime);
+
+    // Step 8: Check Claude CLI version (if available)
+    const claudeVersionStartTime = Date.now();
+    console.log(`[DEBUG ${requestId}] Checking Claude CLI version...`);
+    const claudeVersionResult = await sandbox.exec('claude --version 2>&1 || echo "version check failed"') as CommandResult;
+    console.log(`[DEBUG ${requestId}] Claude version result: ${formatCommandResult('claude_version', claudeVersionResult)}`);
+    addDebugStep(debug, 'claude_version', {
+      success: claudeVersionResult.success,
+      exitCode: claudeVersionResult.exitCode,
+      stdout: claudeVersionResult.stdout?.trim(),
+      stderr: claudeVersionResult.stderr,
+    }, undefined, claudeVersionStartTime);
+
+    // Step 9: Run custom command if provided
+    if (customCommand) {
+      const customStartTime = Date.now();
+      console.log(`[DEBUG ${requestId}] Running custom command: ${customCommand}`);
+      const customResult = await sandbox.exec(customCommand) as CommandResult;
+      console.log(`[DEBUG ${requestId}] Custom command result: ${formatCommandResult(customCommand, customResult)}`);
+      addDebugStep(debug, 'custom_command', {
+        command: customCommand,
+        success: customResult.success,
+        exitCode: customResult.exitCode,
+        stdout: customResult.stdout,
+        stderr: customResult.stderr,
+      }, undefined, customStartTime);
+    }
+
+    // Step 10: Test a minimal Claude execution (just --help to verify it runs)
+    const claudeHelpStartTime = Date.now();
+    console.log(`[DEBUG ${requestId}] Testing Claude CLI help...`);
+    const claudeHelpResult = await sandbox.exec('claude --help 2>&1 | head -20') as CommandResult;
+    console.log(`[DEBUG ${requestId}] Claude help result: ${formatCommandResult('claude_help', claudeHelpResult)}`);
+    addDebugStep(debug, 'claude_help', {
+      success: claudeHelpResult.success,
+      exitCode: claudeHelpResult.exitCode,
+      stdout: claudeHelpResult.stdout?.slice(0, 500),
+      stderr: claudeHelpResult.stderr?.slice(0, 500),
+    }, undefined, claudeHelpStartTime);
+
+    const executionTime = Date.now() - startTime;
+    addDebugStep(debug, 'completed', { total_time_ms: executionTime });
+
+    return Response.json({
+      success: true,
+      request_id: requestId,
+      timestamp: new Date().toISOString(),
+      execution_time_ms: executionTime,
+      debug,
+    }, {
+      headers: { 'X-Request-ID': requestId },
+    });
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error(`[DEBUG ${requestId}] Fatal error: ${errorMessage}`);
+    console.error(`[DEBUG ${requestId}] Stack: ${errorStack}`);
+
+    addDebugStep(debug, 'fatal_error', null, errorMessage);
+
+    return Response.json({
+      success: false,
+      request_id: requestId,
+      timestamp: new Date().toISOString(),
+      execution_time_ms: Date.now() - startTime,
+      error: errorMessage,
+      error_stack: errorStack,
+      debug,
+    }, {
+      status: 500,
+      headers: { 'X-Request-ID': requestId },
+    });
+  }
+}
+
+/**
  * Handle sandbox/CLI-based task execution request
  */
 async function handleExecute(
@@ -393,10 +647,27 @@ async function handleExecute(
   requestId: string
 ): Promise<Response> {
   const startTime = Date.now();
+  const sandboxId = crypto.randomUUID().slice(0, 8);
+
+  // Initialize debug tracking
+  const debug: DebugInfo = {
+    steps: [],
+    environment: {
+      has_anthropic_key: !!env.ANTHROPIC_API_KEY,
+      has_github_pat: !!env.GITHUB_PAT,
+      has_oauth_credentials: !!env.CLAUDE_OAUTH_CREDENTIALS,
+      sandbox_id: sandboxId,
+    },
+  };
+
+  // Collect all errors for better debugging
+  const errors: string[] = [];
 
   try {
     // Parse request body
+    console.log(`[EXEC ${requestId}] Starting execution...`);
     const body: ExecuteRequest = await request.json();
+    addDebugStep(debug, 'request_parsed', { task: body.task?.slice(0, 100), repo: body.repo, branch: body.branch });
 
     // Validate request
     if (!body.task || body.task.trim() === '') {
@@ -408,30 +679,107 @@ async function handleExecute(
       );
     }
 
-    // Validate API key is configured (sandbox mode still needs direct API key)
-    if (!env.ANTHROPIC_API_KEY) {
+    // Validate that either API key or OAuth credentials are configured
+    if (!env.ANTHROPIC_API_KEY && !env.CLAUDE_OAUTH_CREDENTIALS) {
       return createErrorResponse(
-        'ANTHROPIC_API_KEY not configured',
-        'MISSING_API_KEY',
+        'Neither ANTHROPIC_API_KEY nor CLAUDE_OAUTH_CREDENTIALS configured',
+        'MISSING_AUTH',
         requestId,
         500
       );
     }
 
     // Create sandbox with unique ID
-    const sandboxId = crypto.randomUUID().slice(0, 8);
+    console.log(`[EXEC ${requestId}] Creating sandbox ${sandboxId}...`);
+    const sandboxStartTime = Date.now();
     const sandbox = getSandbox(env.Sandbox, sandboxId);
+    addDebugStep(debug, 'sandbox_created', { sandboxId }, undefined, sandboxStartTime);
 
     // Set environment variables in sandbox
-    await sandbox.setEnvVars({
-      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-      GITHUB_PAT: env.GITHUB_PAT, // For git push authentication
-    });
+    // If OAuth credentials are available, do NOT set ANTHROPIC_API_KEY so Claude uses OAuth
+    console.log(`[EXEC ${requestId}] Setting environment variables...`);
+    const envStartTime = Date.now();
+    try {
+      const envVars: Record<string, string> = {
+        GITHUB_PAT: env.GITHUB_PAT || '', // For git push authentication
+      };
+
+      // Only set ANTHROPIC_API_KEY if we don't have OAuth credentials
+      // Claude Code will fall back to OAuth if no API key is set
+      if (!env.CLAUDE_OAUTH_CREDENTIALS && env.ANTHROPIC_API_KEY) {
+        envVars.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY;
+        console.log(`[EXEC ${requestId}] Using API key auth (no OAuth credentials)`);
+      } else if (env.CLAUDE_OAUTH_CREDENTIALS) {
+        console.log(`[EXEC ${requestId}] Will use OAuth credentials (not setting API key)`);
+      }
+
+      await sandbox.setEnvVars(envVars);
+      addDebugStep(debug, 'env_vars_set', { success: true, using_api_key: !env.CLAUDE_OAUTH_CREDENTIALS }, undefined, envStartTime);
+    } catch (envError) {
+      const errMsg = envError instanceof Error ? envError.message : String(envError);
+      addDebugStep(debug, 'env_vars_set', null, errMsg, envStartTime);
+      errors.push(`Failed to set env vars: ${errMsg}`);
+      console.error(`[EXEC ${requestId}] Failed to set env vars: ${errMsg}`);
+    }
+
+    // Set up Claude OAuth credentials if available (uses Claude.ai Max subscription)
+    let usingOAuth = false;
+    if (env.CLAUDE_OAUTH_CREDENTIALS) {
+      console.log(`[EXEC ${requestId}] Setting up Claude OAuth credentials...`);
+      const oauthStartTime = Date.now();
+      try {
+        // Create the .claude directory and write credentials
+        // The home directory in the sandbox is /root (runs as root)
+        const credentialsPath = '/root/.claude/.credentials.json';
+        const mkdirResult = await sandbox.exec('mkdir -p /root/.claude') as CommandResult;
+
+        if (!mkdirResult.success) {
+          throw new Error(`Failed to create .claude directory: ${mkdirResult.stderr}`);
+        }
+
+        // Write the credentials file using printf to handle JSON properly
+        // Escape single quotes for the shell by replacing ' with '\''
+        const escapedCreds = env.CLAUDE_OAUTH_CREDENTIALS.replace(/'/g, "'\\''");
+        const writeResult = await sandbox.exec(
+          `printf '%s' '${escapedCreds}' > ${credentialsPath}`
+        ) as CommandResult;
+
+        if (!writeResult.success) {
+          throw new Error(`Failed to write credentials: ${writeResult.stderr}`);
+        }
+
+        // Verify the file was written
+        const verifyResult = await sandbox.exec(`cat ${credentialsPath} | head -c 50`) as CommandResult;
+        console.log(`[EXEC ${requestId}] Credentials file written, preview: ${verifyResult.stdout?.slice(0, 30)}...`);
+
+        usingOAuth = true;
+        addDebugStep(debug, 'oauth_credentials_set', {
+          success: true,
+          path: credentialsPath,
+          using_oauth: true
+        }, undefined, oauthStartTime);
+        console.log(`[EXEC ${requestId}] Claude OAuth credentials configured successfully`);
+      } catch (oauthError) {
+        const errMsg = oauthError instanceof Error ? oauthError.message : String(oauthError);
+        addDebugStep(debug, 'oauth_credentials_set', null, errMsg, oauthStartTime);
+        errors.push(`Failed to set OAuth credentials: ${errMsg}`);
+        console.error(`[EXEC ${requestId}] Failed to set OAuth credentials: ${errMsg}`);
+        // Continue execution - will fall back to API key if available
+      }
+    } else {
+      console.log(`[EXEC ${requestId}] No OAuth credentials configured, using API key`);
+      addDebugStep(debug, 'oauth_credentials_set', {
+        success: false,
+        reason: 'CLAUDE_OAUTH_CREDENTIALS not configured',
+        using_oauth: false
+      });
+    }
 
     // Determine working directory and setup
     // Use absolute paths to ensure consistency
-    const baseDir = '/home/user';
-    let workingDir = body.options?.working_dir || `${baseDir}/workspace`;
+    // Note: sandbox runs as root, home is /root, default working dir is /workspace
+    const baseDir = '/workspace';
+    let workingDir = body.options?.working_dir || baseDir;
     let repoCreated = false;
 
     // If repo is provided, ensure it exists and clone it
@@ -527,11 +875,63 @@ async function handleExecute(
     // Build Claude Code command
     const cmd = `cd ${workingDir} && claude --append-system-prompt "${systemPrompt}" -p "${escapedTask}" --permission-mode ${permissionMode}`;
 
-    console.log(`Executing Claude Code in sandbox ${sandboxId}: ${cmd}`);
+    console.log(`[EXEC ${requestId}] Executing Claude Code command...`);
+    console.log(`[EXEC ${requestId}] Command: ${cmd.slice(0, 200)}...`);
+    addDebugStep(debug, 'claude_cmd_prepared', { cmd_length: cmd.length, working_dir: workingDir });
 
-    // Execute Claude Code
+    // First verify Claude is available
+    const claudeCheckStartTime = Date.now();
+    console.log(`[EXEC ${requestId}] Checking Claude CLI availability...`);
+    const claudeCheck = await sandbox.exec('which claude && claude --version') as CommandResult;
+    console.log(`[EXEC ${requestId}] Claude check: ${formatCommandResult('which claude', claudeCheck)}`);
+    addDebugStep(debug, 'claude_check', {
+      success: claudeCheck.success,
+      exitCode: claudeCheck.exitCode,
+      stdout: claudeCheck.stdout?.trim(),
+      stderr: claudeCheck.stderr,
+    }, undefined, claudeCheckStartTime);
+
+    if (!claudeCheck.success || !claudeCheck.stdout?.includes('claude')) {
+      errors.push(`Claude CLI not available: ${claudeCheck.stderr || 'not found'}`);
+      console.error(`[EXEC ${requestId}] Claude CLI not available!`);
+    }
+
+    // Execute Claude Code with timeout tracking
+    const claudeStartTime = Date.now();
+    console.log(`[EXEC ${requestId}] Starting Claude execution at ${new Date().toISOString()}...`);
     const execResult = (await sandbox.exec(cmd)) as CommandResult;
-    const logs = getOutput(execResult);
+    const claudeEndTime = Date.now();
+    const claudeDuration = claudeEndTime - claudeStartTime;
+
+    console.log(`[EXEC ${requestId}] Claude execution completed in ${claudeDuration}ms`);
+    console.log(`[EXEC ${requestId}] Claude result: ${formatCommandResult('claude', execResult)}`);
+
+    // Capture both stdout and stderr for debugging
+    const logs = execResult.stdout || '';
+    const stderrLogs = execResult.stderr || '';
+
+    addDebugStep(debug, 'claude_executed', {
+      success: execResult.success,
+      exitCode: execResult.exitCode,
+      stdout_length: logs.length,
+      stderr_length: stderrLogs.length,
+      duration_ms: claudeDuration,
+      stdout_preview: logs.slice(0, 200),
+      stderr_preview: stderrLogs.slice(0, 200),
+    }, undefined, claudeStartTime);
+
+    // If Claude failed, record the error
+    if (!execResult.success) {
+      const claudeError = stderrLogs || logs || `Exit code: ${execResult.exitCode}`;
+      errors.push(`Claude execution failed: ${claudeError.slice(0, 500)}`);
+      console.error(`[EXEC ${requestId}] Claude failed: ${claudeError}`);
+    }
+
+    // If logs are empty but command "succeeded", that's suspicious
+    if (execResult.success && !logs.trim() && !stderrLogs.trim()) {
+      errors.push('Claude execution returned empty output - possible silent failure');
+      console.warn(`[EXEC ${requestId}] Warning: Claude returned empty output`);
+    }
 
     // Get git diff if repo was provided and diff is requested
     let diff: string | undefined;
@@ -629,6 +1029,7 @@ async function handleExecute(
     }
 
     const executionTime = Date.now() - startTime;
+    addDebugStep(debug, 'execution_complete', { total_time_ms: executionTime, errors_count: errors.length });
 
     // Parse repo for response metadata
     let repoOwner: string | undefined;
@@ -638,12 +1039,21 @@ async function handleExecute(
       [repoOwner, repoNameForUrl] = repoPath.split('/');
     }
 
-    // Build response
-    const response: ExecuteResponse = {
-      success: execResult.success,
+    // Determine overall success - consider it failed if Claude didn't produce output
+    const overallSuccess = execResult.success && (logs.trim().length > 0 || errors.length === 0);
+
+    console.log(`[EXEC ${requestId}] Execution complete. Success: ${overallSuccess}, Errors: ${errors.length}`);
+
+    // Build response with enhanced debugging info
+    const response: ExecuteResponse & {
+      stderr?: string;
+      errors?: string[];
+      debug?: DebugInfo;
+    } = {
+      success: overallSuccess,
       request_id: requestId,
       timestamp: new Date().toISOString(),
-      logs,
+      logs: logs || stderrLogs || (errors.length > 0 ? errors.join('\n') : 'No output captured'),
       diff,
       metadata: {
         execution_time_ms: executionTime,
@@ -656,8 +1066,22 @@ async function handleExecute(
           ? `https://github.com/${repoOwner}/${repoNameForUrl}/commit/${commitResult.sha}`
           : undefined,
         pushed: commitResult?.success,
+        using_oauth: usingOAuth,
       },
     };
+
+    // Include stderr separately if it has content
+    if (stderrLogs.trim()) {
+      response.stderr = stderrLogs;
+    }
+
+    // Include any errors we collected
+    if (errors.length > 0) {
+      response.errors = errors;
+    }
+
+    // Include debug info for troubleshooting
+    response.debug = debug;
 
     return Response.json(response, {
       headers: {
@@ -665,26 +1089,42 @@ async function handleExecute(
       },
     });
   } catch (error) {
-    console.error('Execution error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error(`[EXEC ${requestId}] Fatal error: ${errorMessage}`);
+    console.error(`[EXEC ${requestId}] Stack: ${errorStack}`);
+
+    addDebugStep(debug, 'fatal_error', null, errorMessage);
 
     // Handle specific error types
     if (error instanceof Error) {
       if (error.message.includes('timeout')) {
-        return createErrorResponse(
-          'Task execution timed out',
-          'EXECUTION_TIMEOUT',
-          requestId,
-          504
-        );
+        return Response.json({
+          success: false,
+          error: 'Task execution timed out',
+          error_code: 'EXECUTION_TIMEOUT',
+          request_id: requestId,
+          errors,
+          debug,
+        }, {
+          status: 504,
+          headers: { 'X-Request-ID': requestId },
+        });
       }
     }
 
-    return createErrorResponse(
-      error instanceof Error ? error.message : 'Execution failed',
-      'EXECUTION_ERROR',
-      requestId,
-      500
-    );
+    return Response.json({
+      success: false,
+      error: errorMessage,
+      error_code: 'EXECUTION_ERROR',
+      request_id: requestId,
+      error_stack: errorStack,
+      errors,
+      debug,
+    }, {
+      status: 500,
+      headers: { 'X-Request-ID': requestId },
+    });
   }
 }
 

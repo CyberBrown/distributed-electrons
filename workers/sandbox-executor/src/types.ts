@@ -17,6 +17,10 @@ export interface Env extends Cloudflare.Env {
   // AI Gateway auth token (for SDK mode) - optional, only needed for /execute/sdk
   CF_AIG_TOKEN?: string;
 
+  // Claude OAuth credentials JSON (for using Claude.ai Max subscription)
+  // This should be the full contents of ~/.claude/.credentials.json
+  CLAUDE_OAUTH_CREDENTIALS?: string;
+
   // Optional: Instance ID override
   DEFAULT_INSTANCE_ID?: string;
 
@@ -149,6 +153,7 @@ export interface ExecuteResponse {
     commit_sha?: string;
     commit_url?: string;
     pushed?: boolean;
+    using_oauth?: boolean;
   };
 }
 
