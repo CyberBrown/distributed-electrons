@@ -1,16 +1,17 @@
 /**
  * Sandbox Executor Worker
- * Executes Claude tasks via two approaches:
- * 1. SDK approach (POST /execute/sdk) - Base Anthropic SDK via AI Gateway, lightweight
- * 2. Sandbox approach (POST /execute) - Full container isolation with CLI
+ * Executes Claude tasks via multiple approaches:
+ * 1. On-prem runner (POST /execute) - Delegates to on-prem Claude runner if configured
+ * 2. SDK approach (POST /execute/sdk) - Base Anthropic SDK via AI Gateway, lightweight
+ * 3. Sandbox approach (POST /execute) - Full container isolation with CLI (fallback)
  *
  * Endpoints:
  * - POST /execute/sdk - Execute using Anthropic SDK via AI Gateway (recommended)
- * - POST /execute - Execute using Claude Code CLI in sandbox container
+ * - POST /execute - Execute using on-prem runner or sandbox container
  * - POST /debug - Debug endpoint for testing container execution
  * - GET /health - Health check endpoint
  *
- * @version 1.6.0 - Added Claude OAuth support for Max subscription
+ * @version 1.7.0 - Added on-prem Claude runner delegation for stable OAuth
  */
 
 import { getSandbox } from '@cloudflare/sandbox';
@@ -30,6 +31,237 @@ import type {
 
 // Re-export Sandbox for Durable Object binding
 export { Sandbox } from '@cloudflare/sandbox';
+
+/**
+ * OAuth error patterns to detect when Claude auth fails
+ */
+const OAUTH_ERROR_PATTERNS = [
+  'invalid_grant',
+  'token expired',
+  'token has expired',
+  'unauthorized',
+  'session expired',
+  '401 unauthorized',
+  'authentication failed',
+  'invalid api key',
+  'please log in',
+  'not authenticated',
+  'oauth credentials',
+  'access token',
+  'refresh token',
+];
+
+/**
+ * Check if error output indicates OAuth failure
+ */
+function isOAuthError(output: string, exitCode?: number): boolean {
+  const lowerOutput = output.toLowerCase();
+  // Exit code 1 with auth-related error messages
+  if (exitCode === 1 || exitCode === 401) {
+    return OAUTH_ERROR_PATTERNS.some(pattern => lowerOutput.includes(pattern));
+  }
+  return false;
+}
+
+/**
+ * Attempt to auto-refresh OAuth credentials
+ * Returns true if refresh succeeded, false if human intervention is needed
+ */
+async function tryAutoRefreshOAuth(env: Env, requestId: string): Promise<boolean> {
+  try {
+    const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+
+    console.log(`[OAuth Refresh] Attempting automatic token refresh for request ${requestId}`);
+
+    const response = await fetch(`${configServiceUrl}/oauth/claude/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Key': env.INTERNAL_API_KEY || '',
+      },
+    });
+
+    if (response.ok) {
+      console.log(`[OAuth Refresh] Successfully refreshed tokens for request ${requestId}`);
+      return true;
+    }
+
+    const errorData = await response.json().catch(() => ({})) as { error?: string };
+    console.warn(`[OAuth Refresh] Refresh failed: ${response.status} - ${errorData.error || 'Unknown error'}`);
+
+    // 401 means refresh token is invalid - need human intervention
+    return false;
+  } catch (error) {
+    console.error('[OAuth Refresh] Error during refresh attempt:', error);
+    return false;
+  }
+}
+
+// ============================================================================
+// On-Prem Claude Runner Delegation
+// ============================================================================
+
+/**
+ * Response from on-prem Claude runner
+ */
+interface RunnerExecuteResponse {
+  success: boolean;
+  output?: string;
+  error?: string;
+  exit_code?: number;
+  duration_ms: number;
+}
+
+/**
+ * Delegate task execution to on-prem Claude runner
+ * This is the preferred path when CLAUDE_RUNNER_URL is configured
+ *
+ * @param runnerUrl - URL of the on-prem Claude runner (via Cloudflare Tunnel)
+ * @param task - Task description/prompt
+ * @param repoUrl - Optional repository URL to clone
+ * @param runnerSecret - Secret for authenticating with the runner
+ * @param requestId - Request ID for tracking
+ * @param options - Additional execution options
+ */
+async function delegateToRunner(
+  runnerUrl: string,
+  task: string,
+  repoUrl: string | undefined,
+  runnerSecret: string,
+  requestId: string,
+  options?: {
+    timeout_ms?: number;
+    allowed_tools?: string[];
+    max_turns?: number;
+  }
+): Promise<Response> {
+  const startTime = Date.now();
+
+  console.log(`[RUNNER ${requestId}] Delegating to on-prem runner at ${runnerUrl}`);
+
+  try {
+    const response = await fetch(`${runnerUrl}/execute`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Runner-Secret': runnerSecret,
+        'X-Request-ID': requestId,
+      },
+      body: JSON.stringify({
+        prompt: task,
+        repo_url: repoUrl,
+        timeout_ms: options?.timeout_ms || 300000, // 5 minutes default
+        allowed_tools: options?.allowed_tools,
+        max_turns: options?.max_turns,
+      }),
+    });
+
+    const result = await response.json() as RunnerExecuteResponse;
+    const totalTime = Date.now() - startTime;
+
+    console.log(`[RUNNER ${requestId}] Runner response: success=${result.success}, duration=${result.duration_ms}ms`);
+
+    // Check if runner reports OAuth issues
+    if (!result.success && result.error?.includes('OAuth')) {
+      console.error(`[RUNNER ${requestId}] Runner OAuth error: ${result.error}`);
+      return Response.json({
+        success: false,
+        error: result.error,
+        error_code: 'RUNNER_OAUTH_ERROR',
+        request_id: requestId,
+        metadata: {
+          execution_time_ms: totalTime,
+          runner_duration_ms: result.duration_ms,
+          runner_url: runnerUrl,
+          needs_reauth: true,
+        },
+      }, {
+        status: 401,
+        headers: { 'X-Request-ID': requestId },
+      });
+    }
+
+    // Return runner result formatted for our API
+    return Response.json({
+      success: result.success,
+      request_id: requestId,
+      timestamp: new Date().toISOString(),
+      logs: result.output || result.error || 'No output',
+      metadata: {
+        execution_time_ms: totalTime,
+        runner_duration_ms: result.duration_ms,
+        runner_url: runnerUrl,
+        delegated_to_runner: true,
+        exit_code: result.exit_code,
+      },
+    }, {
+      status: result.success ? 200 : 500,
+      headers: { 'X-Request-ID': requestId },
+    });
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[RUNNER ${requestId}] Failed to reach runner: ${errorMessage}`);
+
+    // Runner unreachable - return error, caller can decide to fall back to sandbox
+    return Response.json({
+      success: false,
+      error: `Runner unreachable: ${errorMessage}`,
+      error_code: 'RUNNER_UNREACHABLE',
+      request_id: requestId,
+      metadata: {
+        execution_time_ms: Date.now() - startTime,
+        runner_url: runnerUrl,
+        delegated_to_runner: true,
+        runner_failed: true,
+      },
+    }, {
+      status: 503, // Service Unavailable
+      headers: { 'X-Request-ID': requestId },
+    });
+  }
+}
+
+/**
+ * Emit OAuth expired event to config-service for webhook notifications
+ * Only called when auto-refresh fails and human intervention is needed
+ */
+async function emitOAuthExpiredEvent(
+  env: Env,
+  requestId: string,
+  details: Record<string, unknown>
+): Promise<void> {
+  try {
+    // Use CONFIG_SERVICE_URL from env if available
+    const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+
+    const response = await fetch(`${configServiceUrl}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id: 'system', // System-level event
+        action: 'oauth.expired',
+        eventable_type: 'oauth_credentials',
+        eventable_id: 'claude_max',
+        particulars: {
+          request_id: requestId,
+          service: 'sandbox-executor',
+          timestamp: new Date().toISOString(),
+          auto_refresh_failed: true,
+          ...details,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[OAuth Event] Failed to emit event: ${response.status} ${await response.text()}`);
+    } else {
+      console.log(`[OAuth Event] Successfully emitted oauth.expired event for request ${requestId}`);
+    }
+  } catch (error) {
+    console.error('[OAuth Event] Error emitting OAuth event:', error);
+  }
+}
 
 /**
  * AI Gateway configuration
@@ -268,8 +500,35 @@ export default {
         return addCorsHeaders(response);
       }
 
-      // Sandbox/CLI-based execution (full container isolation)
+      // Sandbox/CLI-based execution (delegates to runner or uses sandbox)
       if (url.pathname === '/execute' && request.method === 'POST') {
+        // If on-prem runner is configured, delegate to it
+        if (env.CLAUDE_RUNNER_URL && env.RUNNER_SECRET) {
+          console.log(`[EXEC ${requestId}] On-prem runner configured, delegating...`);
+          const body: ExecuteRequest = await request.clone().json();
+
+          const runnerResponse = await delegateToRunner(
+            env.CLAUDE_RUNNER_URL,
+            body.task,
+            body.repo,
+            env.RUNNER_SECRET,
+            requestId,
+            {
+              timeout_ms: body.options?.timeout_ms,
+            }
+          );
+
+          // If runner succeeded or returned an auth error, return that response
+          // Only fall back to sandbox if runner is unreachable
+          const runnerResult = await runnerResponse.clone().json() as { error_code?: string };
+          if (runnerResult.error_code !== 'RUNNER_UNREACHABLE') {
+            return addCorsHeaders(runnerResponse);
+          }
+
+          // Runner unreachable - fall back to sandbox execution
+          console.log(`[EXEC ${requestId}] Runner unreachable, falling back to sandbox`);
+        }
+
         const response = await handleExecute(request, env, requestId);
         return addCorsHeaders(response);
       }
@@ -925,6 +1184,43 @@ async function handleExecute(
       const claudeError = stderrLogs || logs || `Exit code: ${execResult.exitCode}`;
       errors.push(`Claude execution failed: ${claudeError.slice(0, 500)}`);
       console.error(`[EXEC ${requestId}] Claude failed: ${claudeError}`);
+
+      // Check if this is an OAuth failure - try auto-refresh first
+      const combinedOutput = `${logs}\n${stderrLogs}`;
+      if (usingOAuth && isOAuthError(combinedOutput, execResult.exitCode)) {
+        console.warn(`[EXEC ${requestId}] OAuth authentication failure detected - attempting auto-refresh...`);
+
+        // Try to auto-refresh tokens
+        const refreshed = await tryAutoRefreshOAuth(env, requestId);
+
+        if (refreshed) {
+          // Tokens refreshed successfully - tell client to retry
+          return createErrorResponse(
+            'OAuth tokens were refreshed automatically. Please retry your request.',
+            'OAUTH_REFRESHED',
+            requestId,
+            503, // Service Unavailable - retry
+            { needs_retry: true, using_oauth: true, auto_refreshed: true }
+          );
+        }
+
+        // Auto-refresh failed - notify human (asynchronously)
+        console.error(`[EXEC ${requestId}] Auto-refresh failed - human intervention required`);
+        emitOAuthExpiredEvent(env, requestId, {
+          error: claudeError.slice(0, 500),
+          sandbox_id: sandboxId,
+          exit_code: execResult.exitCode,
+        }).catch(console.error);
+
+        // Return specific OAuth error response
+        return createErrorResponse(
+          'OAuth refresh token expired. Manual re-authentication required.',
+          'OAUTH_EXPIRED',
+          requestId,
+          401,
+          { needs_reauth: true, using_oauth: true, auto_refresh_failed: true }
+        );
+      }
     }
 
     // If logs are empty but command "succeeded", that's suspicious

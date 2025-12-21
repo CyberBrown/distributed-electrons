@@ -10,6 +10,7 @@ import type {
   EventAction,
   EventableType,
   EventEnv,
+  EventEnvWithContext,
 } from './types';
 
 // Activity feed templates for generating human-readable entries
@@ -145,6 +146,28 @@ const FEED_TEMPLATES: Record<string, { title: string; description: string; icon:
     description: 'An error occurred: {error}',
     icon: 'alert-triangle',
   },
+
+  // OAuth events
+  'oauth.expired': {
+    title: '🔐 OAuth credentials expired',
+    description: 'Claude OAuth credentials have expired. Run: npm run de-auth:refresh',
+    icon: 'alert-circle',
+  },
+  'oauth.refresh_needed': {
+    title: 'OAuth credentials expiring soon',
+    description: 'Claude OAuth credentials will expire in {hours_remaining} hours',
+    icon: 'clock',
+  },
+  'oauth.refreshed': {
+    title: 'OAuth credentials updated',
+    description: 'Claude OAuth credentials were successfully refreshed',
+    icon: 'check-circle',
+  },
+  'oauth.validation_failed': {
+    title: 'OAuth validation failed',
+    description: 'Claude OAuth credentials are invalid: {error}',
+    icon: 'x-circle',
+  },
 };
 
 /**
@@ -152,9 +175,11 @@ const FEED_TEMPLATES: Record<string, { title: string; description: string; icon:
  */
 export class EventTracker {
   private db: D1Database;
+  private ctx?: ExecutionContext;
 
-  constructor(env: EventEnv) {
+  constructor(env: EventEnvWithContext) {
     this.db = env.DB;
+    this.ctx = env.ctx;
   }
 
   /**
@@ -199,8 +224,18 @@ export class EventTracker {
     // Create activity feed entry
     await this.createFeedEntry(event);
 
-    // Trigger webhook deliveries (async, don't await)
-    this.triggerWebhooks(event).catch(console.error);
+    // Trigger webhook deliveries in the background
+    // Use waitUntil if available to keep the worker alive during delivery
+    const webhookPromise = this.triggerWebhooks(event).catch(err => {
+      console.error('Webhook delivery error:', err);
+    });
+
+    if (this.ctx) {
+      this.ctx.waitUntil(webhookPromise);
+    } else {
+      // Fallback: await webhook delivery if no context available
+      await webhookPromise;
+    }
 
     return event;
   }
@@ -276,6 +311,8 @@ export class EventTracker {
         return `${baseUrl}/users/${id}`;
       case 'instance':
         return `${baseUrl}/instances/${id}`;
+      case 'oauth_credentials':
+        return `${baseUrl}/settings/oauth`;
       default:
         return baseUrl;
     }
@@ -292,6 +329,8 @@ export class EventTracker {
     `).bind(event.tenant_id).all();
 
     if (!subscriptions.results || subscriptions.results.length === 0) return;
+
+    const deliveryPromises: Promise<void>[] = [];
 
     for (const sub of subscriptions.results) {
       const subscription = sub as any;
@@ -317,9 +356,16 @@ export class EventTracker {
         VALUES (?, ?, ?, 'pending', 0, ?)
       `).bind(deliveryId, subscription.id, event.id, new Date().toISOString()).run();
 
-      // Attempt delivery (fire and forget)
-      this.deliverWebhook(deliveryId, subscription, event).catch(console.error);
+      // Queue delivery (await all at the end)
+      deliveryPromises.push(
+        this.deliverWebhook(deliveryId, subscription, event).catch(err => {
+          console.error(`Webhook delivery failed for ${deliveryId}:`, err);
+        })
+      );
     }
+
+    // Wait for all deliveries to complete (or fail)
+    await Promise.all(deliveryPromises);
   }
 
   /**
@@ -338,14 +384,58 @@ export class EventTracker {
       attempts++;
 
       try {
-        const payload = {
-          event_id: event.id,
-          action: event.action,
-          eventable_type: event.eventable_type,
-          eventable_id: event.eventable_id,
-          particulars: event.particulars,
-          timestamp: event.created_at,
-        };
+        // Check if this is an ntfy.sh webhook - needs special formatting
+        const isNtfy = subscription.webhook_url.includes('ntfy.sh');
+
+        let payload: Record<string, unknown>;
+        let webhookUrl = subscription.webhook_url;
+
+        if (isNtfy) {
+          // Extract topic from URL if present (e.g., https://ntfy.sh/my-topic)
+          const urlParts = subscription.webhook_url.split('/');
+          const topic = urlParts.length > 3 ? urlParts[urlParts.length - 1] : 'alerts';
+
+          // Use root ntfy.sh URL for JSON posts
+          webhookUrl = 'https://ntfy.sh';
+
+          // Get template for human-readable message
+          const template = FEED_TEMPLATES[event.action];
+          const title = template?.title || event.action;
+          const description = template?.description || `Event: ${event.action}`;
+
+          // Interpolate template with event data
+          const message = this.interpolate(description, {
+            ...event.particulars as Record<string, unknown>,
+            eventable_type: event.eventable_type,
+          });
+
+          payload = {
+            topic,
+            title,
+            message,
+            priority: event.action.includes('expired') || event.action.includes('failed') ? 5 : 3,
+            tags: event.action.includes('expired') ? ['warning', 'key'] : ['information'],
+            // Add action button for OAuth events
+            actions: event.action.startsWith('oauth.') ? [
+              {
+                action: 'view',
+                label: '🔄 Refresh Now',
+                url: 'https://api.distributedelectrons.com/oauth/refresh',
+                clear: true,
+              }
+            ] : undefined,
+          };
+        } else {
+          // Standard webhook payload
+          payload = {
+            event_id: event.id,
+            action: event.action,
+            eventable_type: event.eventable_type,
+            eventable_id: event.eventable_id,
+            particulars: event.particulars,
+            timestamp: event.created_at,
+          };
+        }
 
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
@@ -353,13 +443,13 @@ export class EventTracker {
           'X-DE-Delivery': deliveryId,
         };
 
-        // Add signature if secret is configured
-        if (subscription.secret) {
+        // Add signature if secret is configured (skip for ntfy)
+        if (subscription.secret && !isNtfy) {
           const signature = await this.signPayload(JSON.stringify(payload), subscription.secret);
           headers['X-DE-Signature'] = signature;
         }
 
-        const response = await fetch(subscription.webhook_url, {
+        const response = await fetch(webhookUrl, {
           method: 'POST',
           headers,
           body: JSON.stringify(payload),
@@ -560,14 +650,14 @@ export class EventTracker {
 /**
  * Create event tracker instance
  */
-export function createEventTracker(env: EventEnv): EventTracker {
+export function createEventTracker(env: EventEnvWithContext): EventTracker {
   return new EventTracker(env);
 }
 
 /**
  * Convenience function for tracking events
  */
-export async function trackEvent(env: EventEnv, input: CreateEventInput): Promise<Event> {
+export async function trackEvent(env: EventEnvWithContext, input: CreateEventInput): Promise<Event> {
   const tracker = createEventTracker(env);
   return tracker.track(input);
 }

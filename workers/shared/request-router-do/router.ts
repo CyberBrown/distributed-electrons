@@ -76,11 +76,13 @@ const DEFAULT_RATE_LIMITS: Record<string, ProviderRateLimit> = {
     last_reset: Date.now(),
   },
   // Sandbox executor (Claude Code with OAuth) - uses Claude.ai Max subscription
-  // Lower concurrency due to container overhead
+  // DISABLED: Set to 0 until on-prem Claude runner is deployed
+  // OAuth keeps expiring on Cloudflare edge due to IP/geo issues
+  // Re-enable once CLAUDE_RUNNER_URL is configured in sandbox-executor
   'sandbox-executor': {
     provider: 'sandbox-executor',
-    requests_per_minute: 20,
-    concurrent_requests: 3,
+    requests_per_minute: 0,  // DISABLED - was 20
+    concurrent_requests: 0,  // DISABLED - was 3
     current_rpm: 0,
     current_concurrent: 0,
     last_reset: Date.now(),

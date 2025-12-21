@@ -162,7 +162,8 @@ export async function getEventStats(
  */
 export async function trackEvent(
   request: Request,
-  env: Env
+  env: Env,
+  ctx?: ExecutionContext
 ): Promise<Response> {
   try {
     const body = await request.json() as CreateEventInput;
@@ -187,7 +188,8 @@ export async function trackEvent(
                        undefined;
     const user_agent = request.headers.get('User-Agent') || undefined;
 
-    const tracker = new EventTracker(env);
+    // Pass execution context to EventTracker for background webhook delivery
+    const tracker = new EventTracker({ DB: env.DB, ctx });
     const event = await tracker.track({
       ...body,
       ip_address: body.ip_address || ip_address,
