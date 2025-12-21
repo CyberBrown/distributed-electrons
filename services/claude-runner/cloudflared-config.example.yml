@@ -1,0 +1,45 @@
+# Cloudflare Tunnel Configuration for Claude Runner
+# Copy this to ~/.cloudflared/config.yml on Spark
+#
+# Setup Steps:
+# 1. Install cloudflared: brew install cloudflared (or apt/yum)
+# 2. Login: cloudflared tunnel login
+# 3. Create tunnel: cloudflared tunnel create claude-runner
+# 4. Get the tunnel ID from the output (or from ~/.cloudflared/)
+# 5. Create DNS route: cloudflared tunnel route dns claude-runner claude-runner.distributedelectrons.com
+# 6. Copy this file to ~/.cloudflared/config.yml and fill in values
+# 7. Run: cloudflared tunnel run claude-runner
+#
+# For systemd service (recommended):
+# sudo cloudflared service install
+
+# Your tunnel ID (from step 3)
+tunnel: YOUR_TUNNEL_ID_HERE
+
+# Path to credentials file (created in step 3)
+credentials-file: /home/chris/.cloudflared/YOUR_TUNNEL_ID_HERE.json
+
+# Ingress rules - map hostnames to local services
+ingress:
+  # Claude runner API
+  - hostname: claude-runner.distributedelectrons.com
+    service: http://localhost:8787
+    originRequest:
+      # Increase timeout for long-running Claude tasks
+      connectTimeout: 30s
+      # Keep connections open for streaming
+      keepAliveTimeout: 90s
+      # Disable TLS verification for local service
+      noTLSVerify: true
+
+  # Health check endpoint (optional - for monitoring)
+  - hostname: claude-runner-health.distributedelectrons.com
+    service: http://localhost:8787
+    path: /health
+
+  # Default - reject anything that doesn't match
+  - service: http_status:404
+
+# Optional: Access control (recommended for security)
+# You can add Cloudflare Access policies via the dashboard
+# Settings → Access → Applications → Add an Application

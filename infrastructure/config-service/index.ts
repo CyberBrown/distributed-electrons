@@ -72,8 +72,17 @@ import {
   deleteEventSubscription,
 } from './handlers/activity-handlers';
 
+// OAuth handlers
+import {
+  storeOAuthCredentials,
+  getOAuthStatus,
+  getOAuthCredentials,
+  deleteOAuthCredentials,
+  refreshOAuthCredentials,
+} from './handlers/oauth-handlers';
+
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const { pathname } = url;
     const method = request.method;
@@ -102,6 +111,127 @@ export default {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           }
         );
+      }
+
+      // OAuth refresh page - mobile-friendly UI
+      if (pathname === '/oauth/refresh' || pathname === '/oauth/refresh/') {
+        const refreshPage = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Refresh Claude OAuth</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh; color: #fff; padding: 20px;
+    }
+    .container { max-width: 500px; margin: 0 auto; }
+    h1 { font-size: 1.8rem; margin-bottom: 10px; }
+    .status { background: #ff6b6b; padding: 15px; border-radius: 10px; margin: 20px 0; }
+    .status.success { background: #51cf66; }
+    .step { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px; margin: 15px 0; }
+    .step-num { background: #4dabf7; width: 30px; height: 30px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; }
+    code { background: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; }
+    .btn { display: block; width: 100%; padding: 18px; border: none; border-radius: 10px;
+      font-size: 1.1rem; font-weight: 600; cursor: pointer; margin: 10px 0; text-decoration: none; text-align: center; }
+    .btn-primary { background: #4dabf7; color: #fff; }
+    .btn-success { background: #51cf66; color: #fff; }
+    .btn:active { transform: scale(0.98); }
+    .instructions { font-size: 0.95rem; line-height: 1.6; opacity: 0.9; }
+    #result { margin-top: 20px; padding: 15px; border-radius: 10px; display: none; }
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 50%; border-top-color: #fff; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 Refresh OAuth</h1>
+    <div class="status" id="status">OAuth credentials have expired</div>
+
+    <div class="step">
+      <span class="step-num">1</span>
+      <strong>On your computer, run:</strong>
+      <p class="instructions" style="margin-top: 10px;">
+        <code id="cmd1">claude login</code>
+        <button onclick="copyCmd('cmd1')" style="margin-left:10px;padding:5px 10px;border-radius:5px;border:none;background:#4dabf7;color:#fff;cursor:pointer;">📋 Copy</button>
+        <br><br>
+        Then after login completes:<br><br>
+        <code id="cmd2">cd ~/projects/nexus && bun run de-auth:deploy</code>
+        <button onclick="copyCmd('cmd2')" style="margin-left:10px;padding:5px 10px;border-radius:5px;border:none;background:#4dabf7;color:#fff;cursor:pointer;">📋 Copy</button>
+      </p>
+    </div>
+
+    <button class="btn btn-success" onclick="checkStatus()">
+      ✓ Check Status
+    </button>
+
+    <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.2);">
+      <p style="opacity:0.8;margin-bottom:10px;font-size:0.9rem;">Already logged in on your computer? Your existing credentials may still be valid:</p>
+      <button class="btn btn-primary" onclick="checkStatus()">
+        🔄 Check If Already Valid
+      </button>
+    </div>
+
+    <div id="result"></div>
+
+    <div style="margin-top: 30px; opacity: 0.7; font-size: 0.85rem; text-align: center;">
+      <p>Can't access terminal? SSH into your server first.</p>
+    </div>
+  </div>
+
+  <script>
+    function copyCmd(id) {
+      const text = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.querySelector('#' + id + ' + button');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => btn.textContent = orig, 2000);
+      });
+    }
+
+    async function checkStatus() {
+      const result = document.getElementById('result');
+      const status = document.getElementById('status');
+      result.style.display = 'block';
+      result.innerHTML = '<span class="spinner"></span> Checking...';
+      result.style.background = 'rgba(255,255,255,0.1)';
+
+      try {
+        const resp = await fetch('/oauth/claude/status');
+        const data = await resp.json();
+
+        if (data.data.configured && !data.data.expired) {
+          status.textContent = '✅ OAuth credentials are valid!';
+          status.className = 'status success';
+          result.innerHTML = '🎉 All good! Credentials expire in ' + data.data.hours_remaining + ' hours.';
+          result.style.background = '#51cf66';
+        } else if (data.data.configured && data.data.expired) {
+          result.innerHTML = '⚠️ Credentials found but expired. Please complete the steps above.';
+          result.style.background = '#ff6b6b';
+        } else {
+          result.innerHTML = '❌ No credentials found. Please complete the steps above.';
+          result.style.background = '#ff6b6b';
+        }
+      } catch (e) {
+        result.innerHTML = '❌ Error checking status: ' + e.message;
+        result.style.background = '#ff6b6b';
+      }
+    }
+
+    // Check status on load
+    checkStatus();
+  </script>
+</body>
+</html>`;
+        return new Response(refreshPage, {
+          headers: { ...corsHeaders, 'Content-Type': 'text/html' },
+        });
       }
 
       // Instance routes
@@ -283,6 +413,39 @@ export default {
         }
       }
 
+      // OAuth routes
+      if (pathParts[0] === 'oauth') {
+        if (pathParts.length === 2 && pathParts[1] === 'claude') {
+          // POST /oauth/claude - store credentials
+          if (method === 'POST') {
+            const response = await storeOAuthCredentials(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+          // GET /oauth/claude - get credentials (internal)
+          if (method === 'GET') {
+            const response = await getOAuthCredentials(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+          // DELETE /oauth/claude - delete credentials
+          if (method === 'DELETE') {
+            const response = await deleteOAuthCredentials(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 3 && pathParts[1] === 'claude' && pathParts[2] === 'status') {
+          // GET /oauth/claude/status - get status
+          if (method === 'GET') {
+            const response = await getOAuthStatus(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        } else if (pathParts.length === 3 && pathParts[1] === 'claude' && pathParts[2] === 'refresh') {
+          // POST /oauth/claude/refresh - auto-refresh tokens
+          if (method === 'POST') {
+            const response = await refreshOAuthCredentials(request, env);
+            return addCorsHeaders(response, corsHeaders);
+          }
+        }
+      }
+
       // Activity Feed routes
       if (pathParts[0] === 'activity') {
         if (pathParts.length === 1) {
@@ -305,7 +468,7 @@ export default {
         if (pathParts.length === 1) {
           // POST /events - track new event
           if (method === 'POST') {
-            const response = await trackEvent(request, env);
+            const response = await trackEvent(request, env, ctx);
             return addCorsHeaders(response, corsHeaders);
           }
         } else if (pathParts.length === 2 && pathParts[1] === 'stats') {

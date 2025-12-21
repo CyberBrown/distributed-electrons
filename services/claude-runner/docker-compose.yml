@@ -1,0 +1,51 @@
+# Claude Runner - On-Prem Claude Code Execution
+# Deploy on Spark (home server) behind Cloudflare Tunnel
+
+services:
+  claude-runner:
+    build: .
+    container_name: claude-runner
+    restart: unless-stopped
+    volumes:
+      # Persistent OAuth credentials - mount from host
+      - ${CLAUDE_CONFIG_PATH:-~/.claude}:/root/.claude:rw
+      # Cached git repos for faster execution
+      - ./repos:/repos:rw
+      # Logs
+      - ./logs:/app/logs:rw
+    environment:
+      # Required: Secret for authenticating requests from sandbox-executor
+      - RUNNER_SECRET=${RUNNER_SECRET}
+      # Optional: Config service URL for status updates
+      - CONFIG_SERVICE_URL=${CONFIG_SERVICE_URL:-}
+      # Optional: Internal API key for config service
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
+      # Node environment
+      - NODE_ENV=production
+    ports:
+      # Only bind to localhost - Cloudflare Tunnel handles external access
+      # Using 8789 to avoid conflict with existing claude-code-worker on 8787
+      - "127.0.0.1:8789:8787"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8787/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Cloudflare Tunnel sidecar
+  # Uncomment if you want to run cloudflared in Docker
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: cloudflared-claude-runner
+  #   restart: unless-stopped
+  #   command: tunnel run
+  #   environment:
+  #     - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+  #   depends_on:
+  #     - claude-runner

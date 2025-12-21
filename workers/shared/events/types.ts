@@ -43,13 +43,20 @@ export type SystemAction =
   | 'system.rate_limit_hit'
   | 'system.error';
 
+export type OAuthAction =
+  | 'oauth.expired'
+  | 'oauth.refresh_needed'
+  | 'oauth.refreshed'
+  | 'oauth.validation_failed';
+
 export type EventAction =
   | RequestAction
   | DeliverableAction
   | GenerationAction
   | ModelConfigAction
   | UserAction
-  | SystemAction;
+  | SystemAction
+  | OAuthAction;
 
 // Eventable types (polymorphic association)
 export type EventableType =
@@ -61,7 +68,8 @@ export type EventableType =
   | 'instance'
   | 'organization'
   | 'project'
-  | 'system';
+  | 'system'
+  | 'oauth_credentials';
 
 // Core event structure
 export interface Event {
@@ -160,4 +168,9 @@ export interface MetricsSnapshot {
 // Environment with D1 binding
 export interface EventEnv {
   DB: D1Database;
+}
+
+// Extended environment with execution context for background tasks
+export interface EventEnvWithContext extends EventEnv {
+  ctx?: ExecutionContext;
 }

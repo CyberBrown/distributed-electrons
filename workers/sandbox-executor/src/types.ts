@@ -21,6 +21,17 @@ export interface Env extends Cloudflare.Env {
   // This should be the full contents of ~/.claude/.credentials.json
   CLAUDE_OAUTH_CREDENTIALS?: string;
 
+  // On-prem Claude runner URL (via Cloudflare Tunnel)
+  // When set, /execute requests are delegated to this runner
+  // Falls back to sandbox execution if runner is unreachable
+  CLAUDE_RUNNER_URL?: string;
+
+  // Secret for authenticating with the on-prem Claude runner
+  RUNNER_SECRET?: string;
+
+  // Internal API key for config-service calls (OAuth refresh, events)
+  INTERNAL_API_KEY?: string;
+
   // Optional: Instance ID override
   DEFAULT_INSTANCE_ID?: string;
 
