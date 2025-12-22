@@ -1,6 +1,7 @@
 /**
  * Replicate Provider Adapter
  * For FLUX, video models, and other community models
+ * Routes through AI Gateway when available
  */
 
 import type {
@@ -13,9 +14,37 @@ import type {
 } from '../types';
 import { BaseAdapter } from './base';
 
+// AI Gateway endpoint for Replicate
+const GATEWAY_REPLICATE_URL = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/replicate';
+
 export class ReplicateAdapter extends BaseAdapter {
   readonly providerId = 'replicate';
   readonly supportedWorkers = ['image-gen', 'video-gen'];
+
+  private getBaseUrl(context: AdapterContext): string {
+    // Use AI Gateway if token is available
+    if (context.gatewayToken) {
+      return GATEWAY_REPLICATE_URL;
+    }
+    // Fall back to direct API
+    return 'https://api.replicate.com';
+  }
+
+  private getHeaders(context: AdapterContext): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (context.gatewayToken) {
+      // AI Gateway handles the API key via BYOK
+      headers['cf-aig-authorization'] = `Bearer ${context.gatewayToken}`;
+    } else {
+      // Direct API call
+      headers['Authorization'] = `Bearer ${context.apiKey}`;
+    }
+
+    return headers;
+  }
 
   async execute(
     prompt: string,
@@ -36,7 +65,7 @@ export class ReplicateAdapter extends BaseAdapter {
     options: ImageOptions,
     context: AdapterContext
   ): Promise<ImageResult> {
-    const { model, apiKey } = context;
+    const { model } = context;
 
     // Replicate uses versioned model IDs
     const input: Record<string, any> = {
@@ -57,13 +86,10 @@ export class ReplicateAdapter extends BaseAdapter {
 
     // Create prediction
     const response = await this.makeRequest(
-      'https://api.replicate.com/v1/predictions',
+      `${this.getBaseUrl(context)}/v1/predictions`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: this.getHeaders(context),
         body: JSON.stringify({
           model: model.model_id,
           input,
@@ -79,7 +105,7 @@ export class ReplicateAdapter extends BaseAdapter {
     };
 
     // Poll for completion
-    const result = await this.pollPrediction(prediction.urls.get, apiKey);
+    const result = await this.pollPrediction(prediction.urls.get, context);
 
     const outputUrl = Array.isArray(result.output)
       ? result.output[0]
@@ -97,7 +123,7 @@ export class ReplicateAdapter extends BaseAdapter {
     options: VideoOptions,
     context: AdapterContext
   ): Promise<VideoResult> {
-    const { model, apiKey } = context;
+    const { model } = context;
 
     const input: Record<string, any> = {
       prompt,
@@ -113,13 +139,10 @@ export class ReplicateAdapter extends BaseAdapter {
 
     // Create prediction
     const response = await this.makeRequest(
-      'https://api.replicate.com/v1/predictions',
+      `${this.getBaseUrl(context)}/v1/predictions`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: this.getHeaders(context),
         body: JSON.stringify({
           model: model.model_id,
           input,
@@ -137,7 +160,7 @@ export class ReplicateAdapter extends BaseAdapter {
     // Poll for completion (videos take longer)
     const result = await this.pollPrediction(
       prediction.urls.get,
-      apiKey,
+      context,
       300000 // 5 minute timeout for video
     );
 
@@ -151,17 +174,21 @@ export class ReplicateAdapter extends BaseAdapter {
 
   private async pollPrediction(
     url: string,
-    apiKey: string,
+    context: AdapterContext,
     timeout: number = 60000
   ): Promise<{ output: string | string[]; status: string }> {
     const startTime = Date.now();
 
+    // Build headers for polling
+    const headers: Record<string, string> = {};
+    if (context.gatewayToken) {
+      headers['cf-aig-authorization'] = `Bearer ${context.gatewayToken}`;
+    } else {
+      headers['Authorization'] = `Bearer ${context.apiKey}`;
+    }
+
     while (Date.now() - startTime < timeout) {
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      });
+      const response = await fetch(url, { headers });
 
       const data = (await response.json()) as {
         status: string;
@@ -190,10 +217,15 @@ export class ReplicateAdapter extends BaseAdapter {
 
   async checkHealth(context: AdapterContext): Promise<boolean> {
     try {
-      const response = await fetch('https://api.replicate.com/v1/account', {
-        headers: {
-          Authorization: `Bearer ${context.apiKey}`,
-        },
+      const headers: Record<string, string> = {};
+      if (context.gatewayToken) {
+        headers['cf-aig-authorization'] = `Bearer ${context.gatewayToken}`;
+      } else {
+        headers['Authorization'] = `Bearer ${context.apiKey}`;
+      }
+
+      const response = await fetch(`${this.getBaseUrl(context)}/v1/account`, {
+        headers,
       });
       return response.ok;
     } catch {

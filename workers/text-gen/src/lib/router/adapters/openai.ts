@@ -1,5 +1,6 @@
 /**
  * OpenAI Provider Adapter
+ * Routes through AI Gateway when available
  */
 
 import type {
@@ -14,9 +15,37 @@ import type {
 } from '../types';
 import { BaseAdapter } from './base';
 
+// AI Gateway endpoint for OpenAI
+const GATEWAY_OPENAI_URL = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/openai';
+
 export class OpenAIAdapter extends BaseAdapter {
   readonly providerId = 'openai';
   readonly supportedWorkers = ['text-gen', 'image-gen', 'audio-gen', 'embedding-gen'];
+
+  private getBaseUrl(context: AdapterContext): string {
+    // Use AI Gateway if token is available
+    if (context.gatewayToken) {
+      return GATEWAY_OPENAI_URL;
+    }
+    // Fall back to direct API
+    return 'https://api.openai.com';
+  }
+
+  private getHeaders(context: AdapterContext): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (context.gatewayToken) {
+      // AI Gateway handles the API key via BYOK
+      headers['cf-aig-authorization'] = `Bearer ${context.gatewayToken}`;
+    } else {
+      // Direct API call
+      headers['Authorization'] = `Bearer ${context.apiKey}`;
+    }
+
+    return headers;
+  }
 
   async execute(
     prompt: string,
@@ -45,7 +74,7 @@ export class OpenAIAdapter extends BaseAdapter {
     options: TextOptions,
     context: AdapterContext
   ): Promise<TextResult> {
-    const { model, apiKey } = context;
+    const { model } = context;
 
     const messages: Array<{ role: string; content: string }> = [];
 
@@ -73,13 +102,10 @@ export class OpenAIAdapter extends BaseAdapter {
     }
 
     const response = await this.makeRequest(
-      'https://api.openai.com/v1/chat/completions',
+      `${this.getBaseUrl(context)}/v1/chat/completions`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: this.getHeaders(context),
         body: JSON.stringify(requestBody),
       }
     );
@@ -103,7 +129,7 @@ export class OpenAIAdapter extends BaseAdapter {
     options: ImageOptions,
     context: AdapterContext
   ): Promise<ImageResult> {
-    const { model, apiKey } = context;
+    const { model } = context;
 
     const requestBody: Record<string, any> = {
       model: model.model_id,
@@ -119,13 +145,10 @@ export class OpenAIAdapter extends BaseAdapter {
     }
 
     const response = await this.makeRequest(
-      'https://api.openai.com/v1/images/generations',
+      `${this.getBaseUrl(context)}/v1/images/generations`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: this.getHeaders(context),
         body: JSON.stringify(requestBody),
       }
     );
@@ -146,7 +169,7 @@ export class OpenAIAdapter extends BaseAdapter {
     options: AudioOptions,
     context: AdapterContext
   ): Promise<AudioResult> {
-    const { model, apiKey } = context;
+    const { model } = context;
 
     const requestBody: Record<string, any> = {
       model: model.model_id,
@@ -160,13 +183,10 @@ export class OpenAIAdapter extends BaseAdapter {
     }
 
     const response = await this.makeRequest(
-      'https://api.openai.com/v1/audio/speech',
+      `${this.getBaseUrl(context)}/v1/audio/speech`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: this.getHeaders(context),
         body: JSON.stringify(requestBody),
       }
     );

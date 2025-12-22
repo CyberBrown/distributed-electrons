@@ -273,4 +273,19 @@ export class Selector {
     }
     return provider.base_endpoint;
   }
+
+  /**
+   * Get AI Gateway token
+   * When available, providers route through Cloudflare AI Gateway
+   */
+  getGatewayToken(): string | null {
+    return this.env.CF_AIG_TOKEN || null;
+  }
+
+  /**
+   * Get AI Gateway base URL
+   */
+  getGatewayUrl(): string | null {
+    return this.env.AI_GATEWAY_URL || null;
+  }
 }

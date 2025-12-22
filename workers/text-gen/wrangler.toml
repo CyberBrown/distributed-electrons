@@ -1,6 +1,7 @@
 # Text Generation Worker Configuration
+# DE Router - Universal provider routing through AI Gateway
 
-name = "text-gen"
+name = "de-text-gen"
 main = "index.ts"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
@@ -23,23 +24,19 @@ script_name = "rate-limiter"
 
 # Environment Variables
 [vars]
-DEFAULT_PROVIDER = "openai"
+DEFAULT_PROVIDER = "spark-local"
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
+# AI Gateway URL - all providers route through this gateway
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway"
 
 # Secrets (set with: wrangler secret put <NAME>)
-# Text Providers:
-# - OPENAI_API_KEY
-# - ANTHROPIC_API_KEY
-# - GOOGLE_API_KEY
+# Only CF_AIG_TOKEN is required - all provider API keys are managed via BYOK in AI Gateway
+# - CF_AIG_TOKEN: Cloudflare API token with AI Gateway permissions
+#
+# Legacy secrets (only needed if AI Gateway unavailable):
+# - OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY
+# - IDEOGRAM_API_KEY, REPLICATE_API_TOKEN, ELEVENLABS_API_KEY
 # - SPARK_LOCAL_URL (on-prem LLM via Cloudflare Tunnel)
-# - SPARK_API_KEY (optional, if Spark requires auth)
-#
-# Image Providers:
-# - IDEOGRAM_API_KEY
-# - REPLICATE_API_TOKEN
-#
-# Audio Providers:
-# - ELEVENLABS_API_KEY
 
 # Custom Domain
 [[routes]]

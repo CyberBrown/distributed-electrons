@@ -253,6 +253,9 @@ export interface AdapterContext {
   model: ParsedModel;
   apiKey: string;
   baseUrl?: string;
+  // AI Gateway
+  gatewayToken?: string;
+  gatewayUrl?: string;
 }
 
 export interface ProviderAdapter {
@@ -294,7 +297,11 @@ export interface PromptTransformer {
 export interface RouterEnv {
   DB: D1Database;
 
-  // Provider API Keys
+  // AI Gateway - all provider keys are managed via BYOK in Gateway
+  CF_AIG_TOKEN?: string;
+  AI_GATEWAY_URL?: string;
+
+  // Provider API Keys (legacy - only used if Gateway unavailable)
   ANTHROPIC_API_KEY?: string;
   OPENAI_API_KEY?: string;
   GOOGLE_API_KEY?: string;

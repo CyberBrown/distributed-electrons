@@ -1,13 +1,42 @@
 /**
  * Ideogram Provider Adapter
  * Image generation with excellent text rendering
+ * Routes through AI Gateway when available
  */
 
 import type { AdapterContext, MediaOptions, ImageResult, ImageOptions } from '../types';
 import { ImageAdapter } from './base';
 
+// AI Gateway endpoint for Ideogram
+const GATEWAY_IDEOGRAM_URL = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/ideogram';
+
 export class IdeogramAdapter extends ImageAdapter {
   readonly providerId = 'ideogram';
+
+  private getEndpoint(context: AdapterContext): string {
+    // Use AI Gateway if token is available
+    if (context.gatewayToken) {
+      return `${GATEWAY_IDEOGRAM_URL}/generate`;
+    }
+    // Fall back to direct API
+    return 'https://api.ideogram.ai/generate';
+  }
+
+  private getHeaders(context: AdapterContext): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (context.gatewayToken) {
+      // AI Gateway handles the API key via BYOK
+      headers['cf-aig-authorization'] = `Bearer ${context.gatewayToken}`;
+    } else {
+      // Direct API call
+      headers['Api-Key'] = context.apiKey;
+    }
+
+    return headers;
+  }
 
   async execute(
     prompt: string,
@@ -15,7 +44,7 @@ export class IdeogramAdapter extends ImageAdapter {
     context: AdapterContext
   ): Promise<ImageResult> {
     const imageOptions = options as ImageOptions;
-    const { model, apiKey } = context;
+    const { model } = context;
 
     const requestBody: Record<string, any> = {
       image_request: {
@@ -51,13 +80,10 @@ export class IdeogramAdapter extends ImageAdapter {
     }
 
     const response = await this.makeRequest(
-      'https://api.ideogram.ai/generate',
+      this.getEndpoint(context),
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Api-Key': apiKey,
-        },
+        headers: this.getHeaders(context),
         body: JSON.stringify(requestBody),
       }
     );
@@ -123,14 +149,21 @@ export class IdeogramAdapter extends ImageAdapter {
   }
 
   async checkHealth(context: AdapterContext): Promise<boolean> {
-    // Ideogram doesn't have a health endpoint, check auth
     try {
-      // Just verify the API key works
-      const response = await fetch('https://api.ideogram.ai/manage/api/subscription', {
+      const headers: Record<string, string> = {};
+      if (context.gatewayToken) {
+        headers['cf-aig-authorization'] = `Bearer ${context.gatewayToken}`;
+      } else {
+        headers['Api-Key'] = context.apiKey;
+      }
+
+      const baseUrl = context.gatewayToken
+        ? GATEWAY_IDEOGRAM_URL
+        : 'https://api.ideogram.ai';
+
+      const response = await fetch(`${baseUrl}/manage/api/subscription`, {
         method: 'GET',
-        headers: {
-          'Api-Key': context.apiKey,
-        },
+        headers,
       });
       return response.ok;
     } catch {

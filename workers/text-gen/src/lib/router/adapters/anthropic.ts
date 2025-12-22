@@ -1,12 +1,42 @@
 /**
  * Anthropic Provider Adapter
+ * Routes through AI Gateway when available
  */
 
 import type { AdapterContext, MediaOptions, TextResult, TextOptions } from '../types';
 import { TextAdapter } from './base';
 
+// AI Gateway endpoint for Anthropic
+const GATEWAY_ANTHROPIC_URL = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/anthropic';
+
 export class AnthropicAdapter extends TextAdapter {
   readonly providerId = 'anthropic';
+
+  private getEndpoint(context: AdapterContext): string {
+    // Use AI Gateway if token is available
+    if (context.gatewayToken) {
+      return `${GATEWAY_ANTHROPIC_URL}/v1/messages`;
+    }
+    // Fall back to direct API
+    return 'https://api.anthropic.com/v1/messages';
+  }
+
+  private getHeaders(context: AdapterContext): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    };
+
+    if (context.gatewayToken) {
+      // AI Gateway handles the API key via BYOK
+      headers['cf-aig-authorization'] = `Bearer ${context.gatewayToken}`;
+    } else {
+      // Direct API call
+      headers['x-api-key'] = context.apiKey;
+    }
+
+    return headers;
+  }
 
   async execute(
     prompt: string,
@@ -14,7 +44,7 @@ export class AnthropicAdapter extends TextAdapter {
     context: AdapterContext
   ): Promise<TextResult> {
     const textOptions = options as TextOptions;
-    const { model, apiKey } = context;
+    const { model } = context;
 
     const requestBody: Record<string, any> = {
       model: model.model_id,
@@ -39,14 +69,10 @@ export class AnthropicAdapter extends TextAdapter {
     }
 
     const response = await this.makeRequest(
-      'https://api.anthropic.com/v1/messages',
+      this.getEndpoint(context),
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
+        headers: this.getHeaders(context),
         body: JSON.stringify(requestBody),
       }
     );
@@ -70,14 +96,9 @@ export class AnthropicAdapter extends TextAdapter {
 
   async checkHealth(context: AdapterContext): Promise<boolean> {
     try {
-      // Anthropic doesn't have a simple health endpoint, so we just check auth
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch(this.getEndpoint(context), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': context.apiKey,
-          'anthropic-version': '2023-06-01',
-        },
+        headers: this.getHeaders(context),
         body: JSON.stringify({
           model: 'claude-3-5-haiku-20241022',
           messages: [{ role: 'user', content: 'Hi' }],

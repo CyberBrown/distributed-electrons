@@ -256,6 +256,10 @@ export class Router {
       (finalOptions as any).system_prompt = systemPrompt;
     }
 
+    // Get gateway token for AI Gateway routing
+    const gatewayToken = this.selector.getGatewayToken();
+    const gatewayUrl = this.selector.getGatewayUrl();
+
     // Build adapter context
     const context: AdapterContext = {
       worker: workerId,
@@ -263,6 +267,9 @@ export class Router {
       model,
       apiKey: apiKey || '',
       baseUrl: baseUrl || undefined,
+      // AI Gateway - when token is present, adapters route through Gateway
+      gatewayToken: gatewayToken || undefined,
+      gatewayUrl: gatewayUrl || undefined,
     };
 
     // Execute
