@@ -245,9 +245,10 @@ export class LLMRouter {
    * e.g., when falling back from Anthropic to OpenAI, map claude -> gpt
    */
   private adjustModelForProvider(model: string, provider: ProviderConfig): string {
-    // If spark-local, pass through as-is (it handles any model)
+    // If spark-local, use the available local model (Nemotron)
     if (provider.id === 'spark-local') {
-      return model;
+      // Spark runs Nemotron - always use that regardless of requested model
+      return 'nemotron-3-nano';
     }
 
     // Check if model matches provider
