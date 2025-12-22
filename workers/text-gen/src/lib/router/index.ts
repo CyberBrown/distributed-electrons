@@ -235,7 +235,11 @@ export class Router {
     const apiKey = this.selector.getApiKey(provider);
     const baseUrl = this.selector.getBaseUrl(provider);
 
-    if (!apiKey && provider.type !== 'local') {
+    // Get gateway token for AI Gateway routing
+    const gatewayToken = this.selector.getGatewayToken();
+
+    // Require API key for non-local providers (unless using Gateway with BYOK)
+    if (!apiKey && provider.type !== 'local' && !gatewayToken) {
       throw new ProviderError(provider.id, 'No API key configured');
     }
 
@@ -256,8 +260,7 @@ export class Router {
       (finalOptions as any).system_prompt = systemPrompt;
     }
 
-    // Get gateway token for AI Gateway routing
-    const gatewayToken = this.selector.getGatewayToken();
+    // Get gateway URL (token already retrieved above)
     const gatewayUrl = this.selector.getGatewayUrl();
 
     // Build adapter context

@@ -301,13 +301,14 @@ export interface RouterEnv {
   CF_AIG_TOKEN?: string;
   AI_GATEWAY_URL?: string;
 
-  // Provider API Keys (legacy - only used if Gateway unavailable)
+  // Provider API Keys (used if Gateway unavailable or provider needs direct key)
   ANTHROPIC_API_KEY?: string;
   OPENAI_API_KEY?: string;
   GOOGLE_API_KEY?: string;
   IDEOGRAM_API_KEY?: string;
   ELEVENLABS_API_KEY?: string;
   REPLICATE_API_KEY?: string;
+  ZAI_API_KEY?: string;
 
   // Local providers
   SPARK_LOCAL_URL?: string;

@@ -98,9 +98,11 @@ export class Registry {
       }
 
       // Check if API key exists (for non-local providers)
+      // Provider needs either its own API key OR Gateway token for BYOK
       if (p.type !== 'local' && p.auth_secret_name) {
         const key = (env as any)[p.auth_secret_name];
-        if (!key) return false;
+        // Allow if provider has its own key OR if Gateway token exists (BYOK)
+        if (!key && !env.CF_AIG_TOKEN) return false;
       }
 
       // Check if local URL exists

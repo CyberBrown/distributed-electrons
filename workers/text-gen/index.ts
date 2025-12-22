@@ -993,6 +993,8 @@ async function handleRouterV2Request(
     // Create router v2 instance (needs DB binding from env)
     const routerEnv: RouterEnv = {
       DB: (env as any).DB,
+      CF_AIG_TOKEN: (env as any).CF_AIG_TOKEN,
+      AI_GATEWAY_URL: (env as any).AI_GATEWAY_URL,
       OPENAI_API_KEY: env.OPENAI_API_KEY,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
       GOOGLE_API_KEY: (env as any).GOOGLE_API_KEY,
@@ -1001,6 +1003,7 @@ async function handleRouterV2Request(
       IDEOGRAM_API_KEY: (env as any).IDEOGRAM_API_KEY,
       ELEVENLABS_API_KEY: (env as any).ELEVENLABS_API_KEY,
       REPLICATE_API_KEY: (env as any).REPLICATE_API_TOKEN,
+      ZAI_API_KEY: (env as any).ZAI_API_KEY,
     };
 
     const router = createRouterV2(routerEnv);
@@ -1037,6 +1040,8 @@ async function handleRouterV2Health(
   try {
     const routerEnv: RouterEnv = {
       DB: (env as any).DB,
+      CF_AIG_TOKEN: (env as any).CF_AIG_TOKEN,
+      AI_GATEWAY_URL: (env as any).AI_GATEWAY_URL,
       OPENAI_API_KEY: env.OPENAI_API_KEY,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
       GOOGLE_API_KEY: (env as any).GOOGLE_API_KEY,
@@ -1045,6 +1050,7 @@ async function handleRouterV2Health(
       IDEOGRAM_API_KEY: (env as any).IDEOGRAM_API_KEY,
       ELEVENLABS_API_KEY: (env as any).ELEVENLABS_API_KEY,
       REPLICATE_API_KEY: (env as any).REPLICATE_API_TOKEN,
+      ZAI_API_KEY: (env as any).ZAI_API_KEY,
     };
 
     const router = createRouterV2(routerEnv);
@@ -1080,6 +1086,8 @@ async function handleListWorkflows(
   try {
     const routerEnv: RouterEnv = {
       DB: (env as any).DB,
+      CF_AIG_TOKEN: (env as any).CF_AIG_TOKEN,
+      AI_GATEWAY_URL: (env as any).AI_GATEWAY_URL,
       OPENAI_API_KEY: env.OPENAI_API_KEY,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
       GOOGLE_API_KEY: (env as any).GOOGLE_API_KEY,
@@ -1088,6 +1096,7 @@ async function handleListWorkflows(
       IDEOGRAM_API_KEY: (env as any).IDEOGRAM_API_KEY,
       ELEVENLABS_API_KEY: (env as any).ELEVENLABS_API_KEY,
       REPLICATE_API_KEY: (env as any).REPLICATE_API_TOKEN,
+      ZAI_API_KEY: (env as any).ZAI_API_KEY,
     };
 
     const router = createRouterV2(routerEnv);
@@ -1123,6 +1132,8 @@ async function handleRouterStats(
   try {
     const routerEnv: RouterEnv = {
       DB: (env as any).DB,
+      CF_AIG_TOKEN: (env as any).CF_AIG_TOKEN,
+      AI_GATEWAY_URL: (env as any).AI_GATEWAY_URL,
       OPENAI_API_KEY: env.OPENAI_API_KEY,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
       GOOGLE_API_KEY: (env as any).GOOGLE_API_KEY,
@@ -1131,6 +1142,7 @@ async function handleRouterStats(
       IDEOGRAM_API_KEY: (env as any).IDEOGRAM_API_KEY,
       ELEVENLABS_API_KEY: (env as any).ELEVENLABS_API_KEY,
       REPLICATE_API_KEY: (env as any).REPLICATE_API_TOKEN,
+      ZAI_API_KEY: (env as any).ZAI_API_KEY,
     };
 
     const router = createRouterV2(routerEnv);
