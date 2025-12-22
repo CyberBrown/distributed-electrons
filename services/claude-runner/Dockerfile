@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     && rm -rf /var/lib/apt/lists/*
 
+# Use existing 'node' user (UID 1000) for non-root execution
+# Required for --dangerously-skip-permissions flag
+# UID 1000 matches typical host user for credential mount permissions
+
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
 
@@ -31,6 +35,15 @@ RUN npx tsc
 
 # Remove devDependencies after build
 RUN npm prune --production
+
+# Create repos directory with correct ownership
+RUN mkdir -p /repos && chown -R node:node /repos
+
+# Change ownership of app directory
+RUN chown -R node:node /app
+
+# Switch to non-root user (node has UID 1000)
+USER node
 
 # Expose port (only localhost via docker-compose)
 EXPOSE 8787

@@ -80,7 +80,7 @@ interface OAuthCredentials {
  * Get OAuth credentials path
  */
 function getCredentialsPath(): string {
-  return path.join(process.env.HOME || '/root', '.claude', '.credentials.json');
+  return path.join(process.env.HOME || '/home/node', '.claude', '.credentials.json');
 }
 
 /**
@@ -190,7 +190,8 @@ async function executeClaude(
 ): Promise<{ output: string; exitCode: number }> {
   return new Promise((resolve) => {
     // Build command parts
-    const cmdParts = ['claude', '-p', '--output-format', 'text'];
+    // --dangerously-skip-permissions bypasses all permission checks (like Gemini's --yolo)
+    const cmdParts = ['claude', '-p', '--dangerously-skip-permissions', '--output-format', 'text'];
 
     if (allowedTools && allowedTools.length > 0) {
       cmdParts.push('--allowedTools', allowedTools.join(','));
@@ -214,7 +215,7 @@ async function executeClaude(
       stdio: ['ignore', 'pipe', 'pipe'],  // ignore stdin
       env: {
         ...process.env,
-        HOME: process.env.HOME || '/root',
+        HOME: process.env.HOME || '/home/node',
         CI: 'true',
         TERM: 'dumb',  // Disable any terminal features
       },
