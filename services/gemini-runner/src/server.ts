@@ -93,23 +93,16 @@ function checkAuthStatus(): { configured: boolean; method?: string; details?: st
     };
   }
 
-  // Check for Gemini config directory with credentials
+  // Check for Gemini OAuth credentials (from `gemini` CLI login)
   const configPath = getGeminiConfigPath();
-  const settingsPath = path.join(configPath, 'settings.json');
+  const oauthCredsPath = path.join(configPath, 'oauth_creds.json');
 
-  if (fs.existsSync(settingsPath)) {
-    try {
-      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      if (settings.auth || settings.credentials) {
-        return {
-          configured: true,
-          method: 'google_login',
-          details: 'Using stored Google login credentials',
-        };
-      }
-    } catch {
-      // Settings file exists but couldn't parse
-    }
+  if (fs.existsSync(oauthCredsPath)) {
+    return {
+      configured: true,
+      method: 'google_oauth',
+      details: 'Using Google OAuth credentials from gemini CLI',
+    };
   }
 
   // Check for application default credentials
@@ -182,8 +175,8 @@ async function executeGemini(
   sandbox?: boolean
 ): Promise<{ output: string; exitCode: number }> {
   return new Promise((resolve) => {
-    // Build command parts
-    const cmdParts = ['gemini', '-p'];
+    // Build command parts - Gemini uses positional prompt, not -p flag
+    const cmdParts = ['gemini'];
 
     // Add model if specified
     if (model) {
@@ -195,10 +188,13 @@ async function executeGemini(
       cmdParts.push('--sandbox');
     }
 
+    // Auto-approve all actions for non-interactive execution
+    cmdParts.push('--yolo');
+
     // Output format for easier parsing
     cmdParts.push('--output-format', 'text');
 
-    // Escape prompt for shell
+    // Escape prompt for shell - positional argument at end
     const escapedPrompt = prompt.replace(/'/g, "'\\''");
     cmdParts.push(`'${escapedPrompt}'`);
 

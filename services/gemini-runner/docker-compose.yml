@@ -18,11 +18,6 @@ services:
     environment:
       # Required: Secret for authenticating requests from sandbox-executor
       - RUNNER_SECRET=${RUNNER_SECRET}
-      # Gemini API key (simplest auth method)
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      # Optional: Google Cloud project for Vertex AI
-      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
-      - GOOGLE_GENAI_USE_VERTEXAI=${GOOGLE_GENAI_USE_VERTEXAI:-}
       # Node environment
       - NODE_ENV=production
       # Port
