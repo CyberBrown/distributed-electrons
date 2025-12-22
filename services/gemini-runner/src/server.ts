@@ -19,6 +19,110 @@ const app = express();
 const PORT = process.env.PORT || 8790;
 const RUNNER_SECRET = process.env.RUNNER_SECRET;
 const REPOS_DIR = '/repos';
+const NTFY_TOPIC = process.env.NTFY_TOPIC || 'nexus-oauth-expired';
+const NTFY_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
+
+// Auth failure tracking
+interface AuthFailureState {
+  lastFailureTime: string | null;
+  failureCount: number;
+  lastTaskAttempted: string | null;
+  lastAlertSent: string | null;
+}
+
+const authFailureState: AuthFailureState = {
+  lastFailureTime: null,
+  failureCount: 0,
+  lastTaskAttempted: null,
+  lastAlertSent: null,
+};
+
+// Auth error patterns to detect
+const AUTH_ERROR_PATTERNS = [
+  /oauth.*expired/i,
+  /authentication.*failed/i,
+  /token.*invalid/i,
+  /token.*expired/i,
+  /unauthorized/i,
+  /401/,
+  /unauthenticated/i,
+  /invalid.*credentials/i,
+  /refresh.*token.*failed/i,
+  /login.*required/i,
+  /session.*expired/i,
+  /api.*key.*invalid/i,
+];
+
+/**
+ * Detect if output contains auth error
+ */
+function detectAuthError(output: string): boolean {
+  return AUTH_ERROR_PATTERNS.some(pattern => pattern.test(output));
+}
+
+/**
+ * Send alert to ntfy.sh
+ */
+async function sendNtfyAlert(
+  title: string,
+  message: string,
+  priority: 'min' | 'low' | 'default' | 'high' | 'urgent' = 'high',
+  tags: string[] = ['warning']
+): Promise<void> {
+  try {
+    const response = await fetch(NTFY_URL, {
+      method: 'POST',
+      headers: {
+        'Title': title,
+        'Priority': priority,
+        'Tags': tags.join(','),
+      },
+      body: message,
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to send ntfy alert: ${response.status} ${response.statusText}`);
+    } else {
+      console.log(`Ntfy alert sent: ${title}`);
+      authFailureState.lastAlertSent = new Date().toISOString();
+    }
+  } catch (error) {
+    console.error('Error sending ntfy alert:', error);
+  }
+}
+
+/**
+ * Record auth failure and send alert
+ */
+async function recordAuthFailure(task: string, output: string): Promise<void> {
+  const now = new Date();
+  authFailureState.lastFailureTime = now.toISOString();
+  authFailureState.failureCount++;
+  authFailureState.lastTaskAttempted = task.slice(0, 100); // Truncate for storage
+
+  // Rate limit alerts - don't spam if multiple failures in quick succession
+  const lastAlert = authFailureState.lastAlertSent ? new Date(authFailureState.lastAlertSent) : null;
+  const minutesSinceLastAlert = lastAlert ? (now.getTime() - lastAlert.getTime()) / (1000 * 60) : Infinity;
+
+  if (minutesSinceLastAlert > 5) {
+    // Extract relevant error from output
+    const errorSnippet = output.slice(0, 200).replace(/\n/g, ' ');
+
+    await sendNtfyAlert(
+      '🔴 Gemini CLI Auth Failed',
+      `Service: gemini-runner\n` +
+      `Time: ${now.toISOString()}\n` +
+      `Task: ${task.slice(0, 80)}...\n` +
+      `Error: ${errorSnippet}\n` +
+      `Failures: ${authFailureState.failureCount}\n\n` +
+      `Action: Run 'gemini' on Spark to re-authenticate or check API key`,
+      'urgent',
+      ['rotating_light', 'key']
+    );
+  } else {
+    console.log(`Skipping ntfy alert - last alert was ${minutesSinceLastAlert.toFixed(1)} minutes ago`);
+  }
+}
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -271,6 +375,12 @@ app.get('/health', (_req: Request, res: Response) => {
     service: 'gemini-runner',
     timestamp: new Date().toISOString(),
     auth: authStatus,
+    auth_failures: {
+      last_failure: authFailureState.lastFailureTime,
+      failure_count: authFailureState.failureCount,
+      last_task: authFailureState.lastTaskAttempted,
+      last_alert_sent: authFailureState.lastAlertSent,
+    },
     uptime_seconds: process.uptime(),
   });
 });
@@ -339,10 +449,15 @@ app.post('/execute', authenticate, async (req: Request, res: Response) => {
       duration_ms: Date.now() - startTime,
     };
 
-    // Check if it was an auth error
-    if (result.output.includes('authentication') || result.output.includes('401') || result.output.includes('unauthenticated')) {
+    // Check if it was an auth error using pattern detection
+    if (detectAuthError(result.output)) {
       response.success = false;
       response.error = 'Authentication error - may need to re-authenticate';
+
+      // Record failure and send ntfy alert (async, don't block response)
+      recordAuthFailure(body.prompt, result.output).catch(err => {
+        console.error('Failed to record auth failure:', err);
+      });
     }
 
     res.json(response);
