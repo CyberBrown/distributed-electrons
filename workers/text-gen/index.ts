@@ -18,8 +18,10 @@ import {
   applyResponseMapping,
   validatePayloadMapping,
 } from '../shared/utils/payload-mapper';
-import { createRouter, LLMRouter, type RouterResult } from './llm-router';
+import { createRouter, LLMRouter } from './llm-router';
 import { generateWithSparkLocal } from './spark-provider';
+// Phase 2 Router
+import { createRouter as createRouterV2, type RouterRequest, type RouterEnv } from './src/lib/router';
 
 /**
  * Infer the provider from model name when no explicit prefix is given
@@ -128,6 +130,34 @@ export default {
           timestamp: new Date().toISOString(),
           providers: router.getHealthSummary(),
         }));
+      }
+
+      // ===========================================
+      // Phase 2 Router Endpoints (multi-media, workflows)
+      // ===========================================
+
+      // Route a request through the v2 router
+      if (url.pathname === '/v2/route' && request.method === 'POST') {
+        const response = await handleRouterV2Request(request, env, requestId);
+        return addCorsHeaders(response);
+      }
+
+      // Get v2 router health status
+      if (url.pathname === '/v2/health' && request.method === 'GET') {
+        const response = await handleRouterV2Health(env, requestId);
+        return addCorsHeaders(response);
+      }
+
+      // List available workflows
+      if (url.pathname === '/v2/workflows' && request.method === 'GET') {
+        const response = await handleListWorkflows(env, requestId);
+        return addCorsHeaders(response);
+      }
+
+      // Get router stats
+      if (url.pathname === '/v2/stats' && request.method === 'GET') {
+        const response = await handleRouterStats(env, requestId);
+        return addCorsHeaders(response);
       }
 
       return addCorsHeaders(createErrorResponse(
@@ -943,6 +973,187 @@ function transformAnthropicStream(inputStream: ReadableStream, requestId: string
       reader.cancel();
     },
   });
+}
+
+// ===========================================
+// Phase 2 Router Handlers
+// ===========================================
+
+/**
+ * Handle v2 router request (supports simple and workflow requests)
+ */
+async function handleRouterV2Request(
+  request: Request,
+  env: Env,
+  requestId: string
+): Promise<Response> {
+  try {
+    const body = await request.json() as RouterRequest;
+
+    // Create router v2 instance (needs DB binding from env)
+    const routerEnv: RouterEnv = {
+      DB: (env as any).DB,
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      GOOGLE_API_KEY: (env as any).GOOGLE_API_KEY,
+      SPARK_LOCAL_URL: (env as any).SPARK_LOCAL_URL,
+      SPARK_API_KEY: (env as any).SPARK_API_KEY,
+      IDEOGRAM_API_KEY: (env as any).IDEOGRAM_API_KEY,
+      ELEVENLABS_API_KEY: (env as any).ELEVENLABS_API_KEY,
+      REPLICATE_API_KEY: (env as any).REPLICATE_API_TOKEN,
+    };
+
+    const router = createRouterV2(routerEnv);
+    const result = await router.route(body);
+
+    return Response.json({
+      ...result,
+      request_id: requestId,
+      timestamp: new Date().toISOString(),
+    }, {
+      status: result.success ? 200 : 500,
+      headers: {
+        'X-Request-ID': requestId,
+      },
+    });
+  } catch (error) {
+    console.error('Router v2 error:', error);
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Router request failed',
+      'ROUTER_ERROR',
+      requestId,
+      500
+    );
+  }
+}
+
+/**
+ * Handle v2 router health check
+ */
+async function handleRouterV2Health(
+  env: Env,
+  requestId: string
+): Promise<Response> {
+  try {
+    const routerEnv: RouterEnv = {
+      DB: (env as any).DB,
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      GOOGLE_API_KEY: (env as any).GOOGLE_API_KEY,
+      SPARK_LOCAL_URL: (env as any).SPARK_LOCAL_URL,
+      SPARK_API_KEY: (env as any).SPARK_API_KEY,
+      IDEOGRAM_API_KEY: (env as any).IDEOGRAM_API_KEY,
+      ELEVENLABS_API_KEY: (env as any).ELEVENLABS_API_KEY,
+      REPLICATE_API_KEY: (env as any).REPLICATE_API_TOKEN,
+    };
+
+    const router = createRouterV2(routerEnv);
+    const health = await router.getHealth();
+
+    return Response.json({
+      ...health,
+      request_id: requestId,
+      timestamp: new Date().toISOString(),
+    }, {
+      headers: {
+        'X-Request-ID': requestId,
+      },
+    });
+  } catch (error) {
+    console.error('Router health check error:', error);
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Health check failed',
+      'HEALTH_CHECK_ERROR',
+      requestId,
+      500
+    );
+  }
+}
+
+/**
+ * Handle listing available workflows
+ */
+async function handleListWorkflows(
+  env: Env,
+  requestId: string
+): Promise<Response> {
+  try {
+    const routerEnv: RouterEnv = {
+      DB: (env as any).DB,
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      GOOGLE_API_KEY: (env as any).GOOGLE_API_KEY,
+      SPARK_LOCAL_URL: (env as any).SPARK_LOCAL_URL,
+      SPARK_API_KEY: (env as any).SPARK_API_KEY,
+      IDEOGRAM_API_KEY: (env as any).IDEOGRAM_API_KEY,
+      ELEVENLABS_API_KEY: (env as any).ELEVENLABS_API_KEY,
+      REPLICATE_API_KEY: (env as any).REPLICATE_API_TOKEN,
+    };
+
+    const router = createRouterV2(routerEnv);
+    const workflows = await router.listWorkflows();
+
+    return Response.json({
+      workflows,
+      request_id: requestId,
+      timestamp: new Date().toISOString(),
+    }, {
+      headers: {
+        'X-Request-ID': requestId,
+      },
+    });
+  } catch (error) {
+    console.error('List workflows error:', error);
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Failed to list workflows',
+      'WORKFLOW_LIST_ERROR',
+      requestId,
+      500
+    );
+  }
+}
+
+/**
+ * Handle router stats request
+ */
+async function handleRouterStats(
+  env: Env,
+  requestId: string
+): Promise<Response> {
+  try {
+    const routerEnv: RouterEnv = {
+      DB: (env as any).DB,
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      GOOGLE_API_KEY: (env as any).GOOGLE_API_KEY,
+      SPARK_LOCAL_URL: (env as any).SPARK_LOCAL_URL,
+      SPARK_API_KEY: (env as any).SPARK_API_KEY,
+      IDEOGRAM_API_KEY: (env as any).IDEOGRAM_API_KEY,
+      ELEVENLABS_API_KEY: (env as any).ELEVENLABS_API_KEY,
+      REPLICATE_API_KEY: (env as any).REPLICATE_API_TOKEN,
+    };
+
+    const router = createRouterV2(routerEnv);
+    const stats = await router.getStats();
+
+    return Response.json({
+      stats,
+      request_id: requestId,
+      timestamp: new Date().toISOString(),
+    }, {
+      headers: {
+        'X-Request-ID': requestId,
+      },
+    });
+  } catch (error) {
+    console.error('Router stats error:', error);
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Failed to get stats',
+      'STATS_ERROR',
+      requestId,
+      500
+    );
+  }
 }
 
 /**

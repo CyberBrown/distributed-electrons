@@ -8,6 +8,13 @@ compatibility_flags = ["nodejs_compat"]
 # Worker settings
 workers_dev = true
 
+# D1 Database - Router Registry
+[[d1_databases]]
+binding = "DB"
+database_name = "de-router"
+database_id = "" # Set after running: wrangler d1 create de-router
+migrations_dir = "migrations"
+
 # Rate Limiter Durable Object
 [[durable_objects.bindings]]
 name = "RATE_LIMITER"
@@ -20,10 +27,19 @@ DEFAULT_PROVIDER = "openai"
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
 
 # Secrets (set with: wrangler secret put <NAME>)
+# Text Providers:
 # - OPENAI_API_KEY
 # - ANTHROPIC_API_KEY
-# - SPARK_LOCAL_URL (on-prem LLM via Cloudflare Tunnel, e.g., https://spark-llm.your-tunnel.com)
+# - GOOGLE_API_KEY
+# - SPARK_LOCAL_URL (on-prem LLM via Cloudflare Tunnel)
 # - SPARK_API_KEY (optional, if Spark requires auth)
+#
+# Image Providers:
+# - IDEOGRAM_API_KEY
+# - REPLICATE_API_TOKEN
+#
+# Audio Providers:
+# - ELEVENLABS_API_KEY
 
 # Custom Domain
 [[routes]]
