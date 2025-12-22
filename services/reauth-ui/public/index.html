@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>DE Reauth</title>
+  <style>
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-card: #0f3460;
+      --text-primary: #eee;
+      --text-secondary: #aaa;
+      --accent-green: #4ade80;
+      --accent-yellow: #fbbf24;
+      --accent-red: #f87171;
+      --accent-blue: #60a5fa;
+      --border-radius: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 20px;
+      padding-top: env(safe-area-inset-top, 20px);
+      padding-bottom: env(safe-area-inset-bottom, 20px);
+    }
+
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      text-align: center;
+      margin-bottom: 24px;
+      color: var(--text-primary);
+    }
+
+    .login-form {
+      background: var(--bg-card);
+      border-radius: var(--border-radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .login-form h2 {
+      font-size: 1.25rem;
+      margin-bottom: 16px;
+    }
+
+    .login-form input {
+      width: 100%;
+      padding: 16px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      margin-bottom: 12px;
+    }
+
+    .login-form input::placeholder {
+      color: var(--text-secondary);
+    }
+
+    .service-card {
+      background: var(--bg-card);
+      border-radius: var(--border-radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .service-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .service-name {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .status-badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .status-valid {
+      background: rgba(74, 222, 128, 0.2);
+      color: var(--accent-green);
+    }
+
+    .status-warning {
+      background: rgba(251, 191, 36, 0.2);
+      color: var(--accent-yellow);
+    }
+
+    .status-expired {
+      background: rgba(248, 113, 113, 0.2);
+      color: var(--accent-red);
+    }
+
+    .status-unknown {
+      background: rgba(96, 165, 250, 0.2);
+      color: var(--accent-blue);
+    }
+
+    .service-details {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin-bottom: 16px;
+    }
+
+    .service-details div {
+      margin-bottom: 4px;
+    }
+
+    .time-remaining {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .reauth-btn {
+      width: 100%;
+      padding: 18px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .reauth-btn:active {
+      transform: scale(0.98);
+    }
+
+    .reauth-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .reauth-btn.claude {
+      background: linear-gradient(135deg, #d97706, #ea580c);
+      color: white;
+    }
+
+    .reauth-btn.gemini {
+      background: linear-gradient(135deg, #4285f4, #34a853);
+      color: white;
+    }
+
+    .reauth-btn.login {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+    }
+
+    .message {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      word-break: break-word;
+    }
+
+    .message.success {
+      background: rgba(74, 222, 128, 0.2);
+      color: var(--accent-green);
+    }
+
+    .message.error {
+      background: rgba(248, 113, 113, 0.2);
+      color: var(--accent-red);
+    }
+
+    .message.info {
+      background: rgba(96, 165, 250, 0.2);
+      color: var(--accent-blue);
+    }
+
+    .message a {
+      color: inherit;
+      text-decoration: underline;
+    }
+
+    .refresh-info {
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      margin-top: 20px;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Pull to refresh indicator */
+    .pull-indicator {
+      text-align: center;
+      padding: 10px;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>DE OAuth Status</h1>
+
+    <!-- Login Form (shown if password required) -->
+    <div id="loginForm" class="login-form hidden">
+      <h2>Enter Password</h2>
+      <input type="password" id="passwordInput" placeholder="Password" autocomplete="current-password">
+      <button class="reauth-btn login" onclick="login()">Login</button>
+      <div id="loginMessage" class="message hidden"></div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="hidden">
+      <!-- Claude Code Card -->
+      <div class="service-card">
+        <div class="service-header">
+          <span class="service-name">Claude Code</span>
+          <span id="claudeStatus" class="status-badge status-unknown">Loading...</span>
+        </div>
+        <div class="service-details">
+          <div id="claudeTime" class="time-remaining">--</div>
+          <div id="claudeExpiry">Checking status...</div>
+        </div>
+        <button class="reauth-btn claude" onclick="reauthClaude()" id="claudeBtn">
+          Reauth Claude
+        </button>
+        <div id="claudeMessage" class="message hidden"></div>
+      </div>
+
+      <!-- Gemini CLI Card -->
+      <div class="service-card">
+        <div class="service-header">
+          <span class="service-name">Gemini CLI</span>
+          <span id="geminiStatus" class="status-badge status-unknown">Loading...</span>
+        </div>
+        <div class="service-details">
+          <div id="geminiTime" class="time-remaining">--</div>
+          <div id="geminiExpiry">Checking status...</div>
+        </div>
+        <button class="reauth-btn gemini" onclick="reauthGemini()" id="geminiBtn">
+          Reauth Gemini
+        </button>
+        <div id="geminiMessage" class="message hidden"></div>
+      </div>
+
+      <div class="refresh-info">
+        Auto-refreshes every 30 seconds<br>
+        Pull down to refresh
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let isAuthenticated = false;
+    let refreshInterval = null;
+
+    // Check if we need password auth
+    async function checkAuth() {
+      try {
+        const res = await fetch('/status');
+        if (res.ok) {
+          isAuthenticated = true;
+          showMainContent();
+          await refreshStatus();
+          startAutoRefresh();
+        } else if (res.status === 401) {
+          showLoginForm();
+        }
+      } catch (e) {
+        showLoginForm();
+      }
+    }
+
+    function showLoginForm() {
+      document.getElementById('loginForm').classList.remove('hidden');
+      document.getElementById('mainContent').classList.add('hidden');
+    }
+
+    function showMainContent() {
+      document.getElementById('loginForm').classList.add('hidden');
+      document.getElementById('mainContent').classList.remove('hidden');
+    }
+
+    async function login() {
+      const password = document.getElementById('passwordInput').value;
+      const msgEl = document.getElementById('loginMessage');
+
+      try {
+        const res = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          isAuthenticated = true;
+          showMainContent();
+          await refreshStatus();
+          startAutoRefresh();
+        } else {
+          msgEl.textContent = data.error || 'Invalid password';
+          msgEl.className = 'message error';
+          msgEl.classList.remove('hidden');
+        }
+      } catch (e) {
+        msgEl.textContent = 'Connection error';
+        msgEl.className = 'message error';
+        msgEl.classList.remove('hidden');
+      }
+    }
+
+    // Enter key to login
+    document.getElementById('passwordInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') login();
+    });
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch('/status');
+        if (!res.ok) {
+          if (res.status === 401) {
+            showLoginForm();
+            return;
+          }
+          throw new Error('Failed to fetch status');
+        }
+
+        const data = await res.json();
+        updateServiceCard('claude', data.claude);
+        updateServiceCard('gemini', data.gemini);
+      } catch (e) {
+        console.error('Error fetching status:', e);
+      }
+    }
+
+    function updateServiceCard(service, status) {
+      const statusEl = document.getElementById(`${service}Status`);
+      const timeEl = document.getElementById(`${service}Time`);
+      const expiryEl = document.getElementById(`${service}Expiry`);
+
+      if (!status.configured) {
+        statusEl.textContent = 'Not Configured';
+        statusEl.className = 'status-badge status-unknown';
+        timeEl.textContent = '--';
+        expiryEl.textContent = 'No credentials found';
+        return;
+      }
+
+      if (status.valid) {
+        if (status.hours_remaining !== null && status.hours_remaining < 2) {
+          statusEl.textContent = 'Expiring Soon';
+          statusEl.className = 'status-badge status-warning';
+        } else {
+          statusEl.textContent = 'Valid';
+          statusEl.className = 'status-badge status-valid';
+        }
+
+        if (status.hours_remaining !== null) {
+          const hrs = status.hours_remaining;
+          if (hrs >= 24) {
+            timeEl.textContent = `${Math.floor(hrs / 24)}d ${Math.floor(hrs % 24)}h`;
+          } else {
+            timeEl.textContent = `${hrs.toFixed(1)}h remaining`;
+          }
+        } else {
+          timeEl.textContent = 'Active';
+        }
+
+        if (status.expires_at) {
+          const exp = new Date(status.expires_at);
+          expiryEl.textContent = `Expires: ${exp.toLocaleString()}`;
+        } else {
+          expiryEl.textContent = 'No expiration set';
+        }
+      } else {
+        statusEl.textContent = 'Expired';
+        statusEl.className = 'status-badge status-expired';
+        timeEl.textContent = 'Expired';
+        expiryEl.textContent = 'Re-authentication required';
+      }
+    }
+
+    async function reauthClaude() {
+      const btn = document.getElementById('claudeBtn');
+      const msgEl = document.getElementById('claudeMessage');
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading"></span>Checking...';
+      msgEl.classList.add('hidden');
+
+      try {
+        const res = await fetch('/reauth/claude', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.oauth_url) {
+          msgEl.innerHTML = `<a href="${data.oauth_url}" target="_blank">Click here to authenticate</a><br><small>${data.message}</small>`;
+          msgEl.className = 'message info';
+        } else if (data.success) {
+          msgEl.textContent = data.message;
+          msgEl.className = 'message success';
+        } else {
+          msgEl.textContent = data.message;
+          msgEl.className = 'message error';
+        }
+        msgEl.classList.remove('hidden');
+
+        // Refresh status after a delay
+        setTimeout(refreshStatus, 2000);
+      } catch (e) {
+        msgEl.textContent = 'Connection error';
+        msgEl.className = 'message error';
+        msgEl.classList.remove('hidden');
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Reauth Claude';
+    }
+
+    async function reauthGemini() {
+      const btn = document.getElementById('geminiBtn');
+      const msgEl = document.getElementById('geminiMessage');
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading"></span>Checking...';
+      msgEl.classList.add('hidden');
+
+      try {
+        const res = await fetch('/reauth/gemini', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.oauth_url) {
+          msgEl.innerHTML = `<a href="${data.oauth_url}" target="_blank">Click here to authenticate</a><br><small>${data.message}</small>`;
+          msgEl.className = 'message info';
+        } else if (data.success) {
+          msgEl.textContent = data.message;
+          msgEl.className = 'message success';
+        } else {
+          msgEl.textContent = data.message;
+          msgEl.className = 'message error';
+        }
+        msgEl.classList.remove('hidden');
+
+        setTimeout(refreshStatus, 2000);
+      } catch (e) {
+        msgEl.textContent = 'Connection error';
+        msgEl.className = 'message error';
+        msgEl.classList.remove('hidden');
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Reauth Gemini';
+    }
+
+    function startAutoRefresh() {
+      if (refreshInterval) clearInterval(refreshInterval);
+      refreshInterval = setInterval(refreshStatus, 30000);
+    }
+
+    // Pull to refresh
+    let touchStartY = 0;
+    document.addEventListener('touchstart', (e) => {
+      touchStartY = e.touches[0].clientY;
+    });
+
+    document.addEventListener('touchend', (e) => {
+      const touchEndY = e.changedTouches[0].clientY;
+      if (touchEndY - touchStartY > 100 && window.scrollY === 0) {
+        refreshStatus();
+      }
+    });
+
+    // Initialize
+    checkAuth();
+  </script>
+</body>
+</html>
