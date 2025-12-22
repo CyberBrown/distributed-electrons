@@ -12,7 +12,7 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "de-router"
-database_id = "" # Set after running: wrangler d1 create de-router
+database_id = "8ade17f3-6b9f-4690-a86d-39a3a73ec8c5"
 migrations_dir = "migrations"
 
 # Rate Limiter Durable Object
