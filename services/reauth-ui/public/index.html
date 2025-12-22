@@ -432,19 +432,23 @@
         const res = await fetch('/reauth/claude', { method: 'POST' });
         const data = await res.json();
 
-        if (data.oauth_url) {
-          msgEl.innerHTML = `<a href="${data.oauth_url}" target="_blank">Click here to authenticate</a><br><small>${data.message}</small>`;
-          msgEl.className = 'message info';
-        } else if (data.success) {
+        if (data.success) {
           msgEl.textContent = data.message;
           msgEl.className = 'message success';
         } else {
-          msgEl.textContent = data.message;
-          msgEl.className = 'message error';
+          let html = `<strong>${data.message}</strong>`;
+          if (data.instructions && data.instructions.length > 0) {
+            html += '<ol style="margin: 8px 0 0 16px; padding: 0;">';
+            data.instructions.forEach(step => {
+              html += `<li style="margin: 4px 0;">${step}</li>`;
+            });
+            html += '</ol>';
+          }
+          msgEl.innerHTML = html;
+          msgEl.className = 'message info';
         }
         msgEl.classList.remove('hidden');
 
-        // Refresh status after a delay
         setTimeout(refreshStatus, 2000);
       } catch (e) {
         msgEl.textContent = 'Connection error';
@@ -468,15 +472,20 @@
         const res = await fetch('/reauth/gemini', { method: 'POST' });
         const data = await res.json();
 
-        if (data.oauth_url) {
-          msgEl.innerHTML = `<a href="${data.oauth_url}" target="_blank">Click here to authenticate</a><br><small>${data.message}</small>`;
-          msgEl.className = 'message info';
-        } else if (data.success) {
+        if (data.success) {
           msgEl.textContent = data.message;
           msgEl.className = 'message success';
         } else {
-          msgEl.textContent = data.message;
-          msgEl.className = 'message error';
+          let html = `<strong>${data.message}</strong>`;
+          if (data.instructions && data.instructions.length > 0) {
+            html += '<ol style="margin: 8px 0 0 16px; padding: 0;">';
+            data.instructions.forEach(step => {
+              html += `<li style="margin: 4px 0;">${step}</li>`;
+            });
+            html += '</ol>';
+          }
+          msgEl.innerHTML = html;
+          msgEl.className = 'message info';
         }
         msgEl.classList.remove('hidden');
 

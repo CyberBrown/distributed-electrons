@@ -14,7 +14,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
 
 const app = express();
 const PORT = process.env.PORT || 8791;
@@ -178,142 +177,59 @@ function getGeminiStatus(): ServiceStatus {
 }
 
 /**
- * Trigger Claude reauth by running CLI
- * Returns OAuth URL if found in output
+ * Trigger Claude reauth
+ * Since OAuth requires interactive terminal, provide instructions
  */
-async function triggerClaudeReauth(): Promise<{ success: boolean; oauth_url?: string; message: string }> {
-  return new Promise((resolve) => {
-    // First, check if we can delete credentials to force reauth
-    // For now, we'll just try running claude and see what happens
+async function triggerClaudeReauth(): Promise<{ success: boolean; oauth_url?: string; message: string; instructions?: string[] }> {
+  const status = getClaudeStatus();
 
-    const proc = spawn('claude', ['--version'], {
-      env: {
-        ...process.env,
-        HOME: process.env.HOME || '/home/chris',
-      },
-    });
+  if (status.valid && status.hours_remaining && status.hours_remaining > 1) {
+    return {
+      success: true,
+      message: `Claude is already authenticated (${status.hours_remaining}h remaining)`,
+    };
+  }
 
-    let output = '';
-    let errorOutput = '';
-
-    proc.stdout?.on('data', (data) => {
-      output += data.toString();
-    });
-
-    proc.stderr?.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    proc.on('close', (code) => {
-      // Look for OAuth URL in output
-      const urlMatch = (output + errorOutput).match(/https:\/\/[^\s]+oauth[^\s]*/i) ||
-                       (output + errorOutput).match(/https:\/\/claude\.ai[^\s]*/i);
-
-      if (urlMatch) {
-        resolve({
-          success: true,
-          oauth_url: urlMatch[0],
-          message: 'OAuth URL found - open in browser to authenticate',
-        });
-      } else {
-        // Claude is already authenticated or needs interactive terminal
-        const status = getClaudeStatus();
-        if (status.valid) {
-          resolve({
-            success: true,
-            message: `Claude is already authenticated (${status.hours_remaining}h remaining)`,
-          });
-        } else {
-          resolve({
-            success: false,
-            message: 'Run "claude" in terminal on Spark to re-authenticate. OAuth requires interactive login.',
-          });
-        }
-      }
-    });
-
-    proc.on('error', (err) => {
-      resolve({
-        success: false,
-        message: `Error running Claude CLI: ${err.message}`,
-      });
-    });
-
-    // Timeout after 10s
-    setTimeout(() => {
-      proc.kill();
-      resolve({
-        success: false,
-        message: 'Timeout waiting for Claude CLI',
-      });
-    }, 10000);
-  });
+  // OAuth requires interactive terminal - provide instructions
+  return {
+    success: false,
+    message: status.valid
+      ? `Token expires soon (${status.hours_remaining}h). Re-authenticate to refresh.`
+      : 'Claude OAuth expired or not configured.',
+    instructions: [
+      'SSH into Spark: ssh chris@spark',
+      'Run: claude',
+      'Follow the OAuth prompt in your browser',
+      'Return here and refresh to verify',
+    ],
+  };
 }
 
 /**
  * Trigger Gemini reauth
+ * Since OAuth requires interactive terminal, provide instructions
  */
-async function triggerGeminiReauth(): Promise<{ success: boolean; oauth_url?: string; message: string }> {
-  return new Promise((resolve) => {
-    const proc = spawn('gemini', ['--version'], {
-      env: {
-        ...process.env,
-        HOME: process.env.HOME || '/home/chris',
-      },
-    });
+async function triggerGeminiReauth(): Promise<{ success: boolean; oauth_url?: string; message: string; instructions?: string[] }> {
+  const status = getGeminiStatus();
 
-    let output = '';
-    let errorOutput = '';
+  if (status.valid) {
+    return {
+      success: true,
+      message: 'Gemini is already authenticated',
+    };
+  }
 
-    proc.stdout?.on('data', (data) => {
-      output += data.toString();
-    });
-
-    proc.stderr?.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    proc.on('close', () => {
-      // Look for OAuth URL in output
-      const urlMatch = (output + errorOutput).match(/https:\/\/accounts\.google\.com[^\s]*/i);
-
-      if (urlMatch) {
-        resolve({
-          success: true,
-          oauth_url: urlMatch[0],
-          message: 'OAuth URL found - open in browser to authenticate',
-        });
-      } else {
-        const status = getGeminiStatus();
-        if (status.valid) {
-          resolve({
-            success: true,
-            message: 'Gemini is already authenticated',
-          });
-        } else {
-          resolve({
-            success: false,
-            message: 'Run "gemini" in terminal on Spark to re-authenticate. OAuth requires interactive login.',
-          });
-        }
-      }
-    });
-
-    proc.on('error', (err) => {
-      resolve({
-        success: false,
-        message: `Error running Gemini CLI: ${err.message}`,
-      });
-    });
-
-    setTimeout(() => {
-      proc.kill();
-      resolve({
-        success: false,
-        message: 'Timeout waiting for Gemini CLI',
-      });
-    }, 10000);
-  });
+  // OAuth requires interactive terminal - provide instructions
+  return {
+    success: false,
+    message: 'Gemini OAuth expired or not configured.',
+    instructions: [
+      'SSH into Spark: ssh chris@spark',
+      'Run: gemini',
+      'Follow the Google OAuth prompt in your browser',
+      'Return here and refresh to verify',
+    ],
+  };
 }
 
 // Routes
