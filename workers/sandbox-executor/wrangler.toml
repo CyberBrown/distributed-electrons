@@ -41,8 +41,10 @@ MAX_EXECUTION_TIME = "300000"
 # - ANTHROPIC_API_KEY (for Claude execution in sandbox)
 # - CF_AIG_TOKEN (for SDK mode via AI Gateway)
 # - GITHUB_PAT (for repo creation - requires 'repo' and 'admin:org' scopes)
-# - CLAUDE_RUNNER_URL (on-prem runner URL via Cloudflare Tunnel)
-# - RUNNER_SECRET (secret for authenticating with on-prem runner)
+# - CLAUDE_RUNNER_URL (on-prem Claude runner URL via Cloudflare Tunnel)
+# - RUNNER_SECRET (secret for authenticating with on-prem Claude runner)
+# - GEMINI_RUNNER_URL (on-prem Gemini runner URL via Cloudflare Tunnel)
+# - GEMINI_RUNNER_SECRET (secret for authenticating with on-prem Gemini runner)
 # - INTERNAL_API_KEY (for config-service internal API calls)
 
 # Custom Domain (uncomment when ready for production)

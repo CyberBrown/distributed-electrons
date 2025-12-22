@@ -1,0 +1,43 @@
+# Gemini Runner - On-Prem Gemini CLI Execution
+# Deploy on Spark (home server) behind Cloudflare Tunnel
+
+services:
+  gemini-runner:
+    build: .
+    container_name: gemini-runner
+    restart: unless-stopped
+    volumes:
+      # Persistent Gemini config/auth - mount from host
+      - ${GEMINI_CONFIG_PATH:-~/.gemini}:/root/.gemini:rw
+      # Google Cloud credentials (if using service account)
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:/root/.config/gcloud/application_default_credentials.json:ro
+      # Cached git repos for faster execution
+      - ./repos:/repos:rw
+      # Logs
+      - ./logs:/app/logs:rw
+    environment:
+      # Required: Secret for authenticating requests from sandbox-executor
+      - RUNNER_SECRET=${RUNNER_SECRET}
+      # Gemini API key (simplest auth method)
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # Optional: Google Cloud project for Vertex AI
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+      - GOOGLE_GENAI_USE_VERTEXAI=${GOOGLE_GENAI_USE_VERTEXAI:-}
+      # Node environment
+      - NODE_ENV=production
+      # Port
+      - PORT=8790
+    ports:
+      # Only bind to localhost - Cloudflare Tunnel handles external access
+      - "127.0.0.1:8790:8790"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8790/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

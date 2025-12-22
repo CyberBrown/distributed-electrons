@@ -98,11 +98,11 @@ async function tryAutoRefreshOAuth(env: Env, requestId: string): Promise<boolean
 }
 
 // ============================================================================
-// On-Prem Claude Runner Delegation
+// On-Prem Runner Delegation (Claude & Gemini)
 // ============================================================================
 
 /**
- * Response from on-prem Claude runner
+ * Response from on-prem runners (Claude or Gemini)
  */
 interface RunnerExecuteResponse {
   success: boolean;
@@ -213,6 +213,118 @@ async function delegateToRunner(
         execution_time_ms: Date.now() - startTime,
         runner_url: runnerUrl,
         delegated_to_runner: true,
+        runner_failed: true,
+      },
+    }, {
+      status: 503, // Service Unavailable
+      headers: { 'X-Request-ID': requestId },
+    });
+  }
+}
+
+/**
+ * Delegate task execution to on-prem Gemini runner
+ * This is the preferred path when GEMINI_RUNNER_URL is configured and executor_type is 'gemini'
+ *
+ * @param runnerUrl - URL of the on-prem Gemini runner (via Cloudflare Tunnel)
+ * @param task - Task description/prompt
+ * @param repoUrl - Optional repository URL to clone
+ * @param runnerSecret - Secret for authenticating with the runner
+ * @param requestId - Request ID for tracking
+ * @param options - Additional execution options
+ */
+async function delegateToGeminiRunner(
+  runnerUrl: string,
+  task: string,
+  repoUrl: string | undefined,
+  runnerSecret: string,
+  requestId: string,
+  options?: {
+    timeout_ms?: number;
+    model?: string;
+    sandbox?: boolean;
+  }
+): Promise<Response> {
+  const startTime = Date.now();
+
+  console.log(`[GEMINI ${requestId}] Delegating to on-prem Gemini runner at ${runnerUrl}`);
+
+  try {
+    const response = await fetch(`${runnerUrl}/execute`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Runner-Secret': runnerSecret,
+        'X-Request-ID': requestId,
+      },
+      body: JSON.stringify({
+        prompt: task,
+        repo_url: repoUrl,
+        timeout_ms: options?.timeout_ms || 300000, // 5 minutes default
+        model: options?.model,
+        sandbox: options?.sandbox,
+      }),
+    });
+
+    const result = await response.json() as RunnerExecuteResponse;
+    const totalTime = Date.now() - startTime;
+
+    console.log(`[GEMINI ${requestId}] Runner response: success=${result.success}, duration=${result.duration_ms}ms`);
+
+    // Check if runner reports auth issues
+    if (!result.success && result.error?.includes('authentication')) {
+      console.error(`[GEMINI ${requestId}] Runner auth error: ${result.error}`);
+      return Response.json({
+        success: false,
+        error: result.error,
+        error_code: 'GEMINI_AUTH_ERROR',
+        request_id: requestId,
+        metadata: {
+          execution_time_ms: totalTime,
+          runner_duration_ms: result.duration_ms,
+          runner_url: runnerUrl,
+          needs_reauth: true,
+        },
+      }, {
+        status: 401,
+        headers: { 'X-Request-ID': requestId },
+      });
+    }
+
+    // Return runner result formatted for our API
+    return Response.json({
+      success: result.success,
+      request_id: requestId,
+      timestamp: new Date().toISOString(),
+      logs: result.output || result.error || 'No output',
+      metadata: {
+        execution_time_ms: totalTime,
+        runner_duration_ms: result.duration_ms,
+        runner_url: runnerUrl,
+        delegated_to_runner: true,
+        executor_type: 'gemini',
+        exit_code: result.exit_code,
+      },
+    }, {
+      status: result.success ? 200 : 500,
+      headers: { 'X-Request-ID': requestId },
+    });
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[GEMINI ${requestId}] Failed to reach runner: ${errorMessage}`);
+
+    // Runner unreachable - return error
+    return Response.json({
+      success: false,
+      error: `Gemini runner unreachable: ${errorMessage}`,
+      error_code: 'GEMINI_RUNNER_UNREACHABLE',
+      request_id: requestId,
+      metadata: {
+        execution_time_ms: Date.now() - startTime,
+        runner_url: runnerUrl,
+        delegated_to_runner: true,
+        executor_type: 'gemini',
         runner_failed: true,
       },
     }, {
@@ -502,10 +614,43 @@ export default {
 
       // Sandbox/CLI-based execution (delegates to runner or uses sandbox)
       if (url.pathname === '/execute' && request.method === 'POST') {
+        const body: ExecuteRequest = await request.clone().json();
+        const executorType = body.executor_type || 'claude';
+
+        // Route to Gemini runner if requested
+        if (executorType === 'gemini') {
+          if (env.GEMINI_RUNNER_URL && env.GEMINI_RUNNER_SECRET) {
+            console.log(`[EXEC ${requestId}] Gemini executor requested, delegating to Gemini runner...`);
+
+            const geminiResponse = await delegateToGeminiRunner(
+              env.GEMINI_RUNNER_URL,
+              body.task,
+              body.repo,
+              env.GEMINI_RUNNER_SECRET,
+              requestId,
+              {
+                timeout_ms: body.options?.timeout_ms,
+              }
+            );
+
+            return addCorsHeaders(geminiResponse);
+          } else {
+            // Gemini runner not configured
+            return addCorsHeaders(
+              createErrorResponse(
+                'Gemini executor requested but GEMINI_RUNNER_URL not configured',
+                'GEMINI_NOT_CONFIGURED',
+                requestId,
+                503
+              )
+            );
+          }
+        }
+
+        // Default: Claude executor
         // If on-prem runner is configured, delegate to it
         if (env.CLAUDE_RUNNER_URL && env.RUNNER_SECRET) {
-          console.log(`[EXEC ${requestId}] On-prem runner configured, delegating...`);
-          const body: ExecuteRequest = await request.clone().json();
+          console.log(`[EXEC ${requestId}] On-prem Claude runner configured, delegating...`);
 
           const runnerResponse = await delegateToRunner(
             env.CLAUDE_RUNNER_URL,
