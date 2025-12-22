@@ -14,21 +14,23 @@ workers_dev = true
 enabled = true
 
 # Container configuration for Sandbox SDK
-[[containers]]
-class_name = "Sandbox"
-image = "./Dockerfile"
-instance_type = "basic"
+# TEMPORARILY DISABLED - using on-prem runner instead
+# [[containers]]
+# class_name = "Sandbox"
+# image = "./Dockerfile"
+# instance_type = "basic"
 
 # Durable Objects bindings for Sandbox
-[durable_objects]
-bindings = [
-  { name = "Sandbox", class_name = "Sandbox" }
-]
+# TEMPORARILY DISABLED - using on-prem runner instead
+# [durable_objects]
+# bindings = [
+#   { name = "Sandbox", class_name = "Sandbox" }
+# ]
 
 # Database migrations for Durable Object
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["Sandbox"]
+# [[migrations]]
+# tag = "v1"
+# new_sqlite_classes = ["Sandbox"]
 
 # Environment Variables
 [vars]

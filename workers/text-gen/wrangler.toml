@@ -22,7 +22,8 @@ CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
 # Secrets (set with: wrangler secret put <NAME>)
 # - OPENAI_API_KEY
 # - ANTHROPIC_API_KEY
-# - etc.
+# - SPARK_LOCAL_URL (on-prem LLM via Cloudflare Tunnel, e.g., https://spark-llm.your-tunnel.com)
+# - SPARK_API_KEY (optional, if Spark requires auth)
 
 # Custom Domain
 [[routes]]

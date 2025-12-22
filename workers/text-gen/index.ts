@@ -1,6 +1,7 @@
 /**
  * Text Generation Worker
  * Main worker that orchestrates text generation workflow
+ * Now with Universal LLM Router for automatic fallback
  */
 
 import type {
@@ -17,6 +18,8 @@ import {
   applyResponseMapping,
   validatePayloadMapping,
 } from '../shared/utils/payload-mapper';
+import { createRouter, LLMRouter, type RouterResult } from './llm-router';
+import { generateWithSparkLocal } from './spark-provider';
 
 /**
  * Infer the provider from model name when no explicit prefix is given
@@ -42,6 +45,47 @@ function inferProvider(model: string, defaultProvider: string = 'openai'): strin
  */
 function stripProviderPrefix(model: string): string {
   return model.includes(':') ? model.split(':').slice(1).join(':') : model;
+}
+
+/**
+ * Create a router with all configured generators
+ */
+function createRouterWithGenerators(env: Env): LLMRouter {
+  // Generator functions that match the expected signature
+  const openaiGenerator = async (
+    model: string,
+    prompt: string,
+    options: any,
+    apiKey: string
+  ): Promise<TextResult> => {
+    return await generateWithOpenAI(model, prompt, options, apiKey);
+  };
+
+  const anthropicGenerator = async (
+    model: string,
+    prompt: string,
+    options: any,
+    apiKey: string
+  ): Promise<TextResult> => {
+    return await generateWithAnthropic(model, prompt, options, apiKey);
+  };
+
+  const sparkLocalGenerator = async (
+    model: string,
+    prompt: string,
+    options: any,
+    _apiKey: string
+  ): Promise<TextResult> => {
+    const sparkUrl = (env as any).SPARK_LOCAL_URL;
+    const sparkApiKey = (env as any).SPARK_API_KEY;
+    return await generateWithSparkLocal(model, prompt, options, sparkUrl, sparkApiKey);
+  };
+
+  return createRouter(env, {
+    openai: openaiGenerator,
+    anthropic: anthropicGenerator,
+    sparkLocal: sparkLocalGenerator,
+  });
 }
 
 export default {
@@ -76,10 +120,13 @@ export default {
       }
 
       if (url.pathname === '/health' && request.method === 'GET') {
+        // Create router to get provider health
+        const router = createRouterWithGenerators(env);
         return addCorsHeaders(Response.json({
           status: 'healthy',
           service: 'text-gen',
           timestamp: new Date().toISOString(),
+          providers: router.getHealthSummary(),
         }));
       }
 
@@ -215,29 +262,52 @@ async function handleGenerate(
         result = await generateText(provider, model, body.prompt, body.options || {}, apiKey);
       }
     } else {
-      // No model_id provided - use legacy behavior with hardcoded providers
-      const provider = inferProvider(body.model || '', env.DEFAULT_PROVIDER || 'openai');
-      const model = stripProviderPrefix(body.model || '') || getDefaultModel(provider);
+      // No model_id provided - use smart router with automatic fallback
+      const model = stripProviderPrefix(body.model || '') || getDefaultModel(env.DEFAULT_PROVIDER || 'openai');
 
-      // Get API key
-      const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
-      if (!apiKey) {
+      // Create router and route request with automatic fallback
+      const router = createRouterWithGenerators(env);
+
+      try {
+        const routerResult = await router.route(
+          model,
+          body.prompt,
+          body.options || {},
+          {
+            preferredProvider: body.model?.includes(':')
+              ? inferProvider(body.model, env.DEFAULT_PROVIDER || 'openai')
+              : undefined,
+          }
+        );
+
+        result = {
+          text: routerResult.text,
+          provider: routerResult.provider,
+          model: routerResult.model,
+          tokens_used: routerResult.tokens_used,
+          metadata: {
+            ...routerResult.metadata,
+            routing: routerResult.routingInfo,
+          },
+        };
+
+        // Log routing info
+        if (routerResult.routingInfo.fallbackUsed) {
+          console.log(
+            `Request used fallback: tried ${routerResult.routingInfo.attemptedProviders.join(' → ')}, ` +
+            `succeeded with ${routerResult.routingInfo.finalProvider}`
+          );
+        }
+      } catch (routerError) {
+        // All providers failed - return error with details
+        console.error('All providers failed:', routerError);
         return createErrorResponse(
-          `API key not configured for provider: ${provider}`,
-          'MISSING_API_KEY',
+          routerError instanceof Error ? routerError.message : 'All providers failed',
+          'ALL_PROVIDERS_FAILED',
           requestId,
-          500
+          503
         );
       }
-
-      // Generate text using legacy provider-specific functions
-      result = await generateText(
-        provider,
-        model,
-        body.prompt,
-        body.options || {},
-        apiKey
-      );
     }
 
     // Calculate generation time
