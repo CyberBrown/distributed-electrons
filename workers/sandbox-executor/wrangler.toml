@@ -24,6 +24,8 @@ MAX_EXECUTION_TIME = "300000"
 # - CLAUDE_RUNNER_URL (on-prem runner URL via Cloudflare Tunnel)
 # - RUNNER_SECRET (secret for authenticating with on-prem runner)
 # - INTERNAL_API_KEY (for config-service internal API calls)
+# - CF_ACCESS_CLIENT_ID (Cloudflare Access service token client ID)
+# - CF_ACCESS_CLIENT_SECRET (Cloudflare Access service token secret)
 
 # Migration to remove Sandbox Durable Object
 [[migrations]]

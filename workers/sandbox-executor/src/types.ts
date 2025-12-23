@@ -16,6 +16,10 @@ export interface Env {
   // Secret for authenticating with the on-prem Claude runner
   RUNNER_SECRET?: string;
 
+  // Cloudflare Access service token (for tunnel protection)
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+
   // Config service URL for status updates
   CONFIG_SERVICE_URL?: string;
 
