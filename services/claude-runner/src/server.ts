@@ -63,6 +63,7 @@ function detectAuthError(output: string): boolean {
 
 /**
  * Send alert to ntfy.sh
+ * DISABLED: Notifications temporarily disabled to reduce noise
  */
 async function sendNtfyAlert(
   title: string,
@@ -70,6 +71,10 @@ async function sendNtfyAlert(
   priority: 'min' | 'low' | 'default' | 'high' | 'urgent' = 'high',
   tags: string[] = ['warning']
 ): Promise<void> {
+  // DISABLED: Uncomment to re-enable notifications
+  console.log(`[NTFY DISABLED] Would send: ${title}`);
+  return;
+
   try {
     const response = await fetch(NTFY_URL, {
       method: 'POST',
