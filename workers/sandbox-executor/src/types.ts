@@ -29,6 +29,10 @@ export interface Env extends Cloudflare.Env {
   // Secret for authenticating with the on-prem Claude runner
   RUNNER_SECRET?: string;
 
+  // Cloudflare Access service token (for tunnel protection)
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+
   // On-prem Gemini runner URL (via Cloudflare Tunnel)
   // When set with executor_type: 'gemini', requests are delegated to this runner
   GEMINI_RUNNER_URL?: string;

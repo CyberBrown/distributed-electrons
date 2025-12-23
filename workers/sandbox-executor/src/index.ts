@@ -133,6 +133,10 @@ async function delegateToRunner(
     timeout_ms?: number;
     allowed_tools?: string[];
     max_turns?: number;
+  },
+  accessCredentials?: {
+    clientId?: string;
+    clientSecret?: string;
   }
 ): Promise<Response> {
   const startTime = Date.now();
@@ -140,13 +144,22 @@ async function delegateToRunner(
   console.log(`[RUNNER ${requestId}] Delegating to on-prem runner at ${runnerUrl}`);
 
   try {
+    // Build headers - include CF-Access credentials if configured
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Runner-Secret': runnerSecret,
+      'X-Request-ID': requestId,
+    };
+
+    // Add Cloudflare Access service token headers if configured
+    if (accessCredentials?.clientId && accessCredentials?.clientSecret) {
+      headers['CF-Access-Client-Id'] = accessCredentials.clientId;
+      headers['CF-Access-Client-Secret'] = accessCredentials.clientSecret;
+    }
+
     const response = await fetch(`${runnerUrl}/execute`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Runner-Secret': runnerSecret,
-        'X-Request-ID': requestId,
-      },
+      headers,
       body: JSON.stringify({
         prompt: task,
         repo_url: repoUrl,
@@ -660,6 +673,10 @@ export default {
             requestId,
             {
               timeout_ms: body.options?.timeout_ms,
+            },
+            {
+              clientId: env.CF_ACCESS_CLIENT_ID,
+              clientSecret: env.CF_ACCESS_CLIENT_SECRET,
             }
           );
 
