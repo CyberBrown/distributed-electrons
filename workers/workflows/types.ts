@@ -136,3 +136,94 @@ export interface CallbackPayload {
   error?: string;
   timestamp: string;
 }
+
+// ============================================================================
+// Code Execution Workflow Types
+// ============================================================================
+
+/**
+ * Environment bindings for CodeExecutionWorkflow
+ */
+export interface CodeExecutionEnv {
+  // D1 Database for task tracking
+  DB?: D1Database;
+
+  // Runner URLs (via Cloudflare Tunnel)
+  CLAUDE_RUNNER_URL?: string;
+  GEMINI_RUNNER_URL?: string;
+
+  // Runner authentication secrets
+  RUNNER_SECRET?: string;
+  GEMINI_RUNNER_SECRET?: string;
+
+  // Cloudflare Access service token (for protected runners)
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+
+  // Config service URL for event emission
+  CONFIG_SERVICE_URL?: string;
+}
+
+/**
+ * Parameters for CodeExecutionWorkflow
+ */
+export interface CodeExecutionParams {
+  /** Unique task identifier from Nexus */
+  task_id: string;
+
+  /** The prompt/task to execute */
+  prompt: string;
+
+  /** Optional repository URL to clone before execution */
+  repo_url?: string;
+
+  /** Preferred executor: 'claude' (default) or 'gemini' */
+  preferred_executor?: 'claude' | 'gemini';
+
+  /** Optional context to pass to the executor */
+  context?: Record<string, unknown>;
+
+  /** Optional callback URL for completion notification */
+  callback_url?: string;
+
+  /** Execution timeout in milliseconds (default: 300000 = 5 minutes) */
+  timeout_ms?: number;
+}
+
+/**
+ * Response from on-prem runners (Claude or Gemini)
+ */
+export interface RunnerResponse {
+  success: boolean;
+  output?: string;
+  error?: string;
+  exit_code?: number;
+  duration_ms?: number;
+}
+
+/**
+ * Result from code execution
+ */
+export interface ExecutionResult {
+  success: boolean;
+  task_id: string;
+  executor: 'claude' | 'gemini';
+  output?: string;
+  error?: string;
+  exit_code?: number;
+  quarantine?: boolean;
+  duration_ms: number;
+}
+
+/**
+ * Code execution callback payload sent to client
+ */
+export interface CodeExecutionCallbackPayload {
+  task_id: string;
+  status: 'completed' | 'failed' | 'quarantined';
+  executor: 'claude' | 'gemini';
+  output?: string;
+  error?: string;
+  duration_ms: number;
+  timestamp: string;
+}
