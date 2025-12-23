@@ -229,7 +229,7 @@ async function executeClaude(
 ): Promise<{ output: string; exitCode: number }> {
   return new Promise((resolve) => {
     // Build command parts
-    const cmdParts = ['claude', '-p', '--output-format', 'text'];
+    const cmdParts = ['claude', '-p', '--output-format', 'text', '--dangerously-skip-permissions'];
 
     if (allowedTools && allowedTools.length > 0) {
       cmdParts.push('--allowedTools', allowedTools.join(','));
