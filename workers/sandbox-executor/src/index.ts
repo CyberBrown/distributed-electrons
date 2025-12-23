@@ -387,6 +387,26 @@ async function handleSDKExecute(
     return Response.json(sdkResponse, {
       headers: { 'X-Request-ID': requestId },
     });
+  } catch (error) {
+    console.error(`[SDK ${requestId}] Execution error:`, error);
+
+    if (error instanceof Anthropic.APIError) {
+      if (error.status === 429) {
+        return createErrorResponse('Rate limit exceeded', 'RATE_LIMITED', requestId, 429);
+      }
+      if (error.status === 401 || error.status === 403) {
+        return createErrorResponse(
+          `Auth error (${error.status}): ${error.message}`,
+          'AUTH_ERROR',
+          requestId,
+          error.status
+        );
+      }
+      return createErrorResponse(error.message, 'API_ERROR', requestId, error.status || 500);
+    }
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return createErrorResponse(errorMessage, 'SDK_EXECUTION_ERROR', requestId, 500);
   }
 }
 
