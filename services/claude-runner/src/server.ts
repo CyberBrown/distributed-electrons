@@ -19,6 +19,7 @@ import * as path from 'path';
 const app = express();
 const PORT = process.env.PORT || 8787;
 const RUNNER_SECRET = process.env.RUNNER_SECRET;
+const GITHUB_PAT = process.env.GITHUB_PAT;
 const REPOS_DIR = '/tmp/workspace';
 
 // Middleware
@@ -164,6 +165,11 @@ async function prepareRepo(repoInput: string): Promise<string> {
   // Normalize input - accept both 'owner/repo' and full URLs
   const { url: repoUrl, owner, name } = normalizeRepoUrl(repoInput);
 
+  // Use authenticated URL if GITHUB_PAT is available (for private repos)
+  const cloneUrl = GITHUB_PAT
+    ? `https://x-access-token:${GITHUB_PAT}@github.com/${owner}/${name}.git`
+    : repoUrl;
+
   // Use readable directory name: owner-repo
   const repoDir = path.join(REPOS_DIR, `${owner}-${name}`);
 
@@ -179,9 +185,9 @@ async function prepareRepo(repoInput: string): Promise<string> {
     await runCommand('git', ['reset', '--hard', 'origin/HEAD'], repoDir);
     await runCommand('git', ['clean', '-fdx'], repoDir);
   } else {
-    // Clone new repo
-    console.log(`Cloning ${repoUrl} to ${repoDir}`);
-    await runCommand('git', ['clone', repoUrl, repoDir], REPOS_DIR);
+    // Clone new repo (log without token for security)
+    console.log(`Cloning ${repoUrl} to ${repoDir}${GITHUB_PAT ? ' (authenticated)' : ''}`);
+    await runCommand('git', ['clone', cloneUrl, repoDir], REPOS_DIR);
   }
 
   return repoDir;
