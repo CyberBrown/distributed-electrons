@@ -227,3 +227,63 @@ export interface CodeExecutionCallbackPayload {
   duration_ms: number;
   timestamp: string;
 }
+
+// ============================================================================
+// Nexus Callback Types
+// ============================================================================
+
+/**
+ * Extended environment bindings with Nexus configuration
+ * Extends CodeExecutionEnv with Nexus-specific settings
+ */
+export interface NexusEnv extends CodeExecutionEnv {
+  /** Nexus MCP server API URL */
+  NEXUS_API_URL?: string;
+
+  /** Nexus write passphrase for authentication */
+  NEXUS_PASSPHRASE?: string;
+
+  /** ntfy topic for quarantine notifications (optional) */
+  NTFY_TOPIC?: string;
+}
+
+/**
+ * Result from code execution to report to Nexus
+ */
+export interface NexusExecutionResult {
+  task_id: string;
+  success: boolean;
+  output?: string;
+  error?: string;
+  exit_code?: number;
+  executor_used: string;
+  duration_ms: number;
+}
+
+/**
+ * Nexus task update payload
+ */
+export interface NexusTaskUpdatePayload {
+  task_id: string;
+  status: 'completed' | 'failed' | 'quarantined';
+  result?: {
+    output?: string;
+    error?: string;
+    exit_code?: number;
+    executor: string;
+    duration_ms: number;
+  };
+  retry_count?: number;
+  quarantine_reason?: string;
+}
+
+/**
+ * Nexus API response
+ */
+export interface NexusResponse {
+  success: boolean;
+  task_id?: string;
+  status?: string;
+  retry_count?: number;
+  error?: string;
+}

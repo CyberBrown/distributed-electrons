@@ -39,6 +39,7 @@ SHOTSTACK_ENV = "stage"
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
 CLAUDE_RUNNER_URL = "https://claude-runner.shiftaltcreate.com"
 GEMINI_RUNNER_URL = "https://gemini-runner.shiftaltcreate.com"
+NEXUS_API_URL = "https://nexus-mcp.solamp.workers.dev"
 
 # Secrets (set via wrangler secret put):
 # - SHOTSTACK_API_KEY
@@ -46,6 +47,8 @@ GEMINI_RUNNER_URL = "https://gemini-runner.shiftaltcreate.com"
 # - GEMINI_RUNNER_SECRET (for gemini-runner auth)
 # - CF_ACCESS_CLIENT_ID (optional - for Cloudflare Access protected runners)
 # - CF_ACCESS_CLIENT_SECRET (optional - for Cloudflare Access protected runners)
+# - NEXUS_PASSPHRASE (for Nexus MCP server write access)
+# - NTFY_TOPIC (optional - for quarantine notifications)
 
 # Custom Domain (optional)
 # [[routes]]

@@ -7,22 +7,27 @@
  * - Retries with exponential backoff
  * - Crash recovery (resume from last checkpoint)
  * - Result reporting (success or quarantine)
+ * - Nexus callback with retry tracking and quarantine
  *
  * Steps:
  * 1. log-request: Log request receipt for visibility
  * 2. execute-primary: Attempt primary executor (claude-runner by default)
  * 3. execute-fallback: On failure, try gemini-runner
- * 4. report-result: Report completion status (success/quarantine)
+ * 4. report-result: Report completion status (success/quarantine) to D1/config-service
+ * 5. report-to-nexus: Report result to Nexus MCP server (with retry/quarantine tracking)
+ * 6. send-callback: Optional client callback notification
  */
 
 import { WorkflowEntrypoint, WorkflowStep, type WorkflowEvent } from 'cloudflare:workers';
-import type { CodeExecutionParams, CodeExecutionEnv, ExecutionResult, RunnerResponse } from './types';
+import type { CodeExecutionParams, ExecutionResult, RunnerResponse } from './types';
+import type { NexusEnv } from './lib/nexus-callback';
+import { reportToNexus } from './lib/nexus-callback';
 
 // Default runner URLs (via Cloudflare Tunnel)
 const DEFAULT_CLAUDE_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
 const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini-runner.shiftaltcreate.com';
 
-export class CodeExecutionWorkflow extends WorkflowEntrypoint<CodeExecutionEnv, CodeExecutionParams> {
+export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExecutionParams> {
   /**
    * Main workflow execution
    */
@@ -152,7 +157,34 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<CodeExecutionEnv, 
 
     console.log(`[CodeExecutionWorkflow] Result reported: ${reportResult.status}`);
 
-    // Step 5: Send callback if configured (best effort)
+    // Step 5: Report to Nexus
+    const nexusReportResult = await step.do(
+      'report-to-nexus',
+      {
+        retries: {
+          limit: 3,
+          delay: '2 seconds',
+          backoff: 'exponential',
+        },
+        timeout: '30 seconds',
+      },
+      async () => {
+        const reported = await reportToNexus(this.env, {
+          task_id: task_id,
+          success: primaryResult!.success,
+          output: primaryResult!.output,
+          error: primaryResult!.error,
+          exit_code: primaryResult!.exit_code,
+          executor_used: primaryResult!.executor,
+          duration_ms: primaryResult!.duration_ms,
+        });
+        return { reported, timestamp: new Date().toISOString() };
+      }
+    );
+
+    console.log(`[CodeExecutionWorkflow] Nexus report: ${nexusReportResult.reported ? 'success' : 'failed'}`);
+
+    // Step 6: Send callback if configured (best effort)
     if (callback_url) {
       await step.do(
         'send-callback',
