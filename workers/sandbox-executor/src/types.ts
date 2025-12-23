@@ -16,10 +16,21 @@ export interface Env {
   // Secret for authenticating with the on-prem Claude runner
   RUNNER_SECRET?: string;
 
+  // Cloudflare Access service token (for tunnel protection)
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+
+  // On-prem Gemini runner URL (via Cloudflare Tunnel)
+  // When set with executor_type: 'gemini', requests are delegated to this runner
+  GEMINI_RUNNER_URL?: string;
+
+  // Secret for authenticating with the on-prem Gemini runner
+  GEMINI_RUNNER_SECRET?: string;
+
   // Config service URL for status updates
   CONFIG_SERVICE_URL?: string;
 
-  // Internal API key for config-service calls
+  // Internal API key for config-service calls (OAuth refresh, events)
   INTERNAL_API_KEY?: string;
 
   // Max execution time in ms
@@ -30,8 +41,12 @@ export interface Env {
  * Request to execute a task via the on-prem runner
  */
 export interface ExecuteRequest {
-  // The task/prompt to send to Claude
+  // The task/prompt to send to the AI agent
   task: string;
+
+  // Executor type: 'claude' (default) or 'gemini'
+  // Determines which on-prem runner to use
+  executor_type?: 'claude' | 'gemini';
 
   // Optional: Git repository to clone and work on
   repo?: string;

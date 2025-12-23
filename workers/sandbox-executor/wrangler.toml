@@ -21,8 +21,13 @@ MAX_EXECUTION_TIME = "300000"
 
 # Secrets (set with: wrangler secret put <NAME>)
 # - CF_AIG_TOKEN (for SDK mode via AI Gateway)
-# - CLAUDE_RUNNER_URL (on-prem runner URL via Cloudflare Tunnel)
-# - RUNNER_SECRET (secret for authenticating with on-prem runner)
+# - GITHUB_PAT (for repo creation - requires 'repo' and 'admin:org' scopes)
+# - CLAUDE_RUNNER_URL (on-prem Claude runner URL via Cloudflare Tunnel)
+# - RUNNER_SECRET (secret for authenticating with on-prem Claude runner)
+# - CF_ACCESS_CLIENT_ID (Cloudflare Access service token client ID)
+# - CF_ACCESS_CLIENT_SECRET (Cloudflare Access service token secret)
+# - GEMINI_RUNNER_URL (on-prem Gemini runner URL via Cloudflare Tunnel)
+# - GEMINI_RUNNER_SECRET (secret for authenticating with on-prem Gemini runner)
 # - INTERNAL_API_KEY (for config-service internal API calls)
 
 # Migration to remove Sandbox Durable Object

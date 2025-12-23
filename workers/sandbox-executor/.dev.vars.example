@@ -10,8 +10,22 @@
 CF_AIG_TOKEN=your_cloudflare_ai_gateway_token_here
 
 # ===========================================
-# Sandbox Mode (POST /execute)
+# On-Prem Runner Mode (POST /execute) - Recommended for Code Tasks
+# ===========================================
+# Routes CLI executor tasks to on-prem Spark server via Cloudflare Tunnel
+# This avoids OAuth expiration issues on CF edge containers
+
+# Claude Code runner (default, or use executor_type: 'claude')
+CLAUDE_RUNNER_URL=https://claude-runner.shiftaltcreate.com
+RUNNER_SECRET=your_claude_runner_secret_from_spark_env
+
+# Gemini CLI runner (use executor_type: 'gemini' in request)
+GEMINI_RUNNER_URL=https://gemini-runner.shiftaltcreate.com
+GEMINI_RUNNER_SECRET=your_gemini_runner_secret_from_spark_env
+
+# ===========================================
+# Fallback: Sandbox Mode (POST /execute)
 # ===========================================
 # Anthropic API key for Claude Code CLI in sandbox container
-# Only needed if using sandbox/CLI mode
+# Only used if on-prem runner is unreachable
 ANTHROPIC_API_KEY=your_anthropic_api_key_here

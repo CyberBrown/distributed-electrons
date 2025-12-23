@@ -1,14 +1,13 @@
 /**
- * Claude Runner - On-Prem Claude Code Execution Service
+ * Gemini Runner - On-Prem Gemini CLI Execution Service
  *
  * Runs on Spark (home server) behind Cloudflare Tunnel.
- * Provides persistent OAuth credentials for Claude Code CLI.
+ * Provides persistent auth credentials for Gemini CLI.
  *
  * Endpoints:
- * - POST /execute - Execute a Claude Code task
+ * - POST /execute - Execute a Gemini CLI task
  * - GET /health - Health check
- * - GET /oauth/status - Check OAuth credential status
- * - POST /oauth/refresh - Attempt token refresh
+ * - GET /auth/status - Check auth credential status
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -17,9 +16,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const app = express();
-const PORT = process.env.PORT || 8787;
+const PORT = process.env.PORT || 8790;
 const RUNNER_SECRET = process.env.RUNNER_SECRET;
-const GITHUB_PAT = process.env.GITHUB_PAT;
 const REPOS_DIR = '/repos';
 const NTFY_TOPIC = process.env.NTFY_TOPIC || 'nexus-oauth-expired';
 const NTFY_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
@@ -52,6 +50,7 @@ const AUTH_ERROR_PATTERNS = [
   /refresh.*token.*failed/i,
   /login.*required/i,
   /session.*expired/i,
+  /api.*key.*invalid/i,
 ];
 
 /**
@@ -110,13 +109,13 @@ async function recordAuthFailure(task: string, output: string): Promise<void> {
     const errorSnippet = output.slice(0, 200).replace(/\n/g, ' ');
 
     await sendNtfyAlert(
-      '🔴 Claude Code OAuth Failed',
-      `Service: claude-runner\n` +
+      '🔴 Gemini CLI Auth Failed',
+      `Service: gemini-runner\n` +
       `Time: ${now.toISOString()}\n` +
       `Task: ${task.slice(0, 80)}...\n` +
       `Error: ${errorSnippet}\n` +
       `Failures: ${authFailureState.failureCount}\n\n` +
-      `Action: Run 'claude login' on Spark to re-authenticate`,
+      `Action: Run 'gemini' on Spark to re-authenticate or check API key`,
       'urgent',
       ['rotating_light', 'key']
     );
@@ -156,8 +155,8 @@ interface ExecuteRequest {
   repo_url?: string;
   working_dir?: string;
   timeout_ms?: number;
-  allowed_tools?: string[];
-  max_turns?: number;
+  model?: string;
+  sandbox?: boolean;
 }
 
 interface ExecuteResponse {
@@ -168,129 +167,78 @@ interface ExecuteResponse {
   duration_ms: number;
 }
 
-interface OAuthCredentials {
-  accessToken?: string;
-  refreshToken?: string;
-  expiresAt?: string;
-  claudeAiOauth?: {
-    accessToken: string;
-    refreshToken: string;
-    expiresAt: string;
-    accountUuid?: string;
-  };
+/**
+ * Get Gemini config directory path
+ */
+function getGeminiConfigPath(): string {
+  return path.join(process.env.HOME || '/root', '.gemini');
 }
 
 /**
- * Get OAuth credentials path
+ * Check if Gemini CLI is authenticated
+ * Gemini can use: Google login, API key, or Vertex AI
  */
-function getCredentialsPath(): string {
-  return path.join(process.env.HOME || '/home/node', '.claude', '.credentials.json');
-}
-
-/**
- * Read OAuth credentials
- */
-function readCredentials(): OAuthCredentials | null {
-  try {
-    const credPath = getCredentialsPath();
-    if (!fs.existsSync(credPath)) {
-      return null;
-    }
-    const content = fs.readFileSync(credPath, 'utf-8');
-    return JSON.parse(content);
-  } catch (error) {
-    console.error('Error reading credentials:', error);
-    return null;
-  }
-}
-
-/**
- * Check if OAuth is configured and valid
- */
-function checkOAuthStatus(): { configured: boolean; expired: boolean; expires_at?: string; hours_remaining?: number } {
-  const creds = readCredentials();
-
-  if (!creds) {
-    return { configured: false, expired: true };
+function checkAuthStatus(): { configured: boolean; method?: string; details?: string } {
+  // Check for API key in environment
+  if (process.env.GEMINI_API_KEY) {
+    return {
+      configured: true,
+      method: 'api_key',
+      details: 'Using GEMINI_API_KEY environment variable',
+    };
   }
 
-  // Handle both formats
-  const expiresAt = creds.claudeAiOauth?.expiresAt || creds.expiresAt;
-
-  if (!expiresAt) {
-    return { configured: true, expired: true };
+  // Check for Google Cloud / Vertex AI
+  if (process.env.GOOGLE_CLOUD_PROJECT && process.env.GOOGLE_GENAI_USE_VERTEXAI) {
+    return {
+      configured: true,
+      method: 'vertex_ai',
+      details: `Vertex AI with project: ${process.env.GOOGLE_CLOUD_PROJECT}`,
+    };
   }
 
-  const expiresDate = new Date(expiresAt);
-  const now = new Date();
-  const hoursRemaining = (expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+  // Check for Gemini OAuth credentials (from `gemini` CLI login)
+  const configPath = getGeminiConfigPath();
+  const oauthCredsPath = path.join(configPath, 'oauth_creds.json');
 
-  return {
-    configured: true,
-    expired: hoursRemaining <= 0,
-    expires_at: expiresAt,
-    hours_remaining: Math.max(0, Math.round(hoursRemaining * 10) / 10),
-  };
-}
-
-/**
- * Normalize repo input to full GitHub URL
- * Accepts:
- *   - 'owner/repo' -> 'https://github.com/owner/repo'
- *   - 'https://github.com/owner/repo' -> as-is
- *   - 'https://github.com/owner/repo.git' -> as-is
- */
-function normalizeRepoUrl(repoInput: string): { url: string; owner: string; name: string } {
-  // Strip any trailing .git and protocol prefix to get clean owner/repo
-  const cleaned = repoInput
-    .replace(/^https?:\/\/github\.com\//, '')
-    .replace(/\.git$/, '');
-
-  const parts = cleaned.split('/');
-  if (parts.length < 2 || !parts[0] || !parts[1]) {
-    throw new Error(`Invalid repo format: "${repoInput}". Expected "owner/repo" or GitHub URL.`);
+  if (fs.existsSync(oauthCredsPath)) {
+    return {
+      configured: true,
+      method: 'google_oauth',
+      details: 'Using Google OAuth credentials from gemini CLI',
+    };
   }
 
-  const owner = parts[0];
-  const name = parts[1];
+  // Check for application default credentials
+  const adcPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (adcPath && fs.existsSync(adcPath)) {
+    return {
+      configured: true,
+      method: 'service_account',
+      details: 'Using service account credentials',
+    };
+  }
 
-  return {
-    url: `https://github.com/${owner}/${name}.git`,
-    owner,
-    name,
-  };
+  return { configured: false };
 }
 
 /**
  * Clone or update a git repository
  */
-async function prepareRepo(repoInput: string): Promise<string> {
-  // Normalize input - accept both 'owner/repo' and full URLs
-  const { url: repoUrl, owner, name } = normalizeRepoUrl(repoInput);
+async function prepareRepo(repoUrl: string): Promise<string> {
+  const repoHash = Buffer.from(repoUrl).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+  const repoDir = path.join(REPOS_DIR, repoHash);
 
-  // Use authenticated URL if GITHUB_PAT is available (for private repos)
-  const cloneUrl = GITHUB_PAT
-    ? `https://x-access-token:${GITHUB_PAT}@github.com/${owner}/${name}.git`
-    : repoUrl;
-
-  // Use readable directory name: owner-repo
-  const repoDir = path.join(REPOS_DIR, `${owner}-${name}`);
-
-  // Ensure workspace directory exists
   if (!fs.existsSync(REPOS_DIR)) {
     fs.mkdirSync(REPOS_DIR, { recursive: true });
   }
 
   if (fs.existsSync(repoDir)) {
-    // Update existing repo
-    console.log(`Updating existing repo at ${repoDir}`);
     await runCommand('git', ['fetch', '--all'], repoDir);
     await runCommand('git', ['reset', '--hard', 'origin/HEAD'], repoDir);
     await runCommand('git', ['clean', '-fdx'], repoDir);
   } else {
-    // Clone new repo (log without token for security)
-    console.log(`Cloning ${repoUrl} to ${repoDir}${GITHUB_PAT ? ' (authenticated)' : ''}`);
-    await runCommand('git', ['clone', cloneUrl, repoDir], REPOS_DIR);
+    await runCommand('git', ['clone', repoUrl, repoDir], REPOS_DIR);
   }
 
   return repoDir;
@@ -321,29 +269,36 @@ function runCommand(cmd: string, args: string[], cwd: string): Promise<string> {
 }
 
 /**
- * Execute Claude Code CLI
+ * Execute Gemini CLI
  */
-async function executeClaude(
+async function executeGemini(
   prompt: string,
   workingDir: string,
   timeoutMs: number,
-  allowedTools?: string[],
-  maxTurns?: number
+  model?: string,
+  sandbox?: boolean
 ): Promise<{ output: string; exitCode: number }> {
   return new Promise((resolve) => {
-    // Build command parts
-    // --dangerously-skip-permissions bypasses all permission checks (like Gemini's --yolo)
-    const cmdParts = ['claude', '-p', '--dangerously-skip-permissions', '--output-format', 'text'];
+    // Build command parts - Gemini uses positional prompt, not -p flag
+    const cmdParts = ['gemini'];
 
-    if (allowedTools && allowedTools.length > 0) {
-      cmdParts.push('--allowedTools', allowedTools.join(','));
+    // Add model if specified
+    if (model) {
+      cmdParts.push('-m', model);
     }
 
-    if (maxTurns) {
-      cmdParts.push('--max-turns', maxTurns.toString());
+    // Add sandbox mode if requested (restricts file system access)
+    if (sandbox) {
+      cmdParts.push('--sandbox');
     }
 
-    // Escape prompt for shell (replace single quotes)
+    // Auto-approve all actions for non-interactive execution
+    cmdParts.push('--yolo');
+
+    // Output format for easier parsing
+    cmdParts.push('--output-format', 'text');
+
+    // Escape prompt for shell - positional argument at end
     const escapedPrompt = prompt.replace(/'/g, "'\\''");
     cmdParts.push(`'${escapedPrompt}'`);
 
@@ -351,15 +306,14 @@ async function executeClaude(
     const fullCommand = `${cmdParts.join(' ')} 2>&1 </dev/null`;
     console.log(`Executing: ${fullCommand} in ${workingDir}`);
 
-    // Use shell execution for better compatibility
     const proc: ChildProcess = spawn('sh', ['-c', fullCommand], {
       cwd: workingDir,
-      stdio: ['ignore', 'pipe', 'pipe'],  // ignore stdin
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        HOME: process.env.HOME || '/home/node',
+        HOME: process.env.HOME || '/root',
         CI: 'true',
-        TERM: 'dumb',  // Disable any terminal features
+        TERM: 'dumb',
       },
     });
 
@@ -378,7 +332,6 @@ async function executeClaude(
       console.log(`[stderr] ${chunk.slice(0, 100)}`);
     });
 
-    // Timeout handler
     const timeout = setTimeout(() => {
       console.log(`Timeout reached (${timeoutMs}ms), killing process`);
       proc.kill('SIGTERM');
@@ -415,13 +368,13 @@ async function executeClaude(
  * Health check endpoint
  */
 app.get('/health', (_req: Request, res: Response) => {
-  const oauthStatus = checkOAuthStatus();
+  const authStatus = checkAuthStatus();
 
   res.json({
     status: 'healthy',
-    service: 'claude-runner',
+    service: 'gemini-runner',
     timestamp: new Date().toISOString(),
-    oauth: oauthStatus,
+    auth: authStatus,
     auth_failures: {
       last_failure: authFailureState.lastFailureTime,
       failure_count: authFailureState.failureCount,
@@ -433,43 +386,15 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 /**
- * OAuth status endpoint (authenticated)
+ * Auth status endpoint (authenticated)
  */
-app.get('/oauth/status', authenticate, (_req: Request, res: Response) => {
-  const status = checkOAuthStatus();
+app.get('/auth/status', authenticate, (_req: Request, res: Response) => {
+  const status = checkAuthStatus();
   res.json(status);
 });
 
 /**
- * OAuth refresh endpoint (authenticated)
- * This triggers a re-read of credentials - actual refresh happens via CLI
- */
-app.post('/oauth/refresh', authenticate, (_req: Request, res: Response) => {
-  // Re-read credentials to see if they've been updated externally
-  const status = checkOAuthStatus();
-
-  if (!status.configured) {
-    return res.status(404).json({
-      error: 'No OAuth credentials configured',
-      message: 'Run `claude login` on this machine to configure OAuth',
-    });
-  }
-
-  if (status.expired) {
-    return res.status(401).json({
-      error: 'OAuth credentials expired',
-      message: 'Run `claude login` on this machine to re-authenticate',
-    });
-  }
-
-  res.json({
-    refreshed: true,
-    ...status,
-  });
-});
-
-/**
- * Execute Claude Code task (authenticated)
+ * Execute Gemini CLI task (authenticated)
  */
 app.post('/execute', authenticate, async (req: Request, res: Response) => {
   const startTime = Date.now();
@@ -481,14 +406,14 @@ app.post('/execute', authenticate, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'prompt is required' });
     }
 
-    // Check OAuth status first
-    const oauthStatus = checkOAuthStatus();
-    if (!oauthStatus.configured || oauthStatus.expired) {
+    // Check auth status first
+    const authStatus = checkAuthStatus();
+    if (!authStatus.configured) {
       return res.status(401).json({
         success: false,
-        error: 'OAuth credentials not configured or expired',
-        oauth_status: oauthStatus,
-        message: 'Run `claude login` on this machine',
+        error: 'Gemini CLI not authenticated',
+        auth_status: authStatus,
+        message: 'Set GEMINI_API_KEY or run `gemini` to authenticate',
       });
     }
 
@@ -507,14 +432,14 @@ app.post('/execute', authenticate, async (req: Request, res: Response) => {
       }
     }
 
-    // Execute Claude
+    // Execute Gemini
     const timeoutMs = body.timeout_ms || 300000; // 5 minutes default
-    const result = await executeClaude(
+    const result = await executeGemini(
       body.prompt,
       workingDir,
       timeoutMs,
-      body.allowed_tools,
-      body.max_turns
+      body.model,
+      body.sandbox
     );
 
     const response: ExecuteResponse = {
@@ -527,7 +452,7 @@ app.post('/execute', authenticate, async (req: Request, res: Response) => {
     // Check if it was an auth error using pattern detection
     if (detectAuthError(result.output)) {
       response.success = false;
-      response.error = 'Authentication error - may need to re-login';
+      response.error = 'Authentication error - may need to re-authenticate';
 
       // Record failure and send ntfy alert (async, don't block response)
       recordAuthFailure(body.prompt, result.output).catch(err => {
@@ -590,8 +515,8 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Claude Runner listening on port ${PORT}`);
-  console.log(`OAuth status:`, checkOAuthStatus());
+  console.log(`Gemini Runner listening on port ${PORT}`);
+  console.log(`Auth status:`, checkAuthStatus());
 
   if (!RUNNER_SECRET) {
     console.warn('WARNING: RUNNER_SECRET not set - authentication disabled!');

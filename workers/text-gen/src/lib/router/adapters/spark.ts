@@ -10,7 +10,8 @@ import type { AdapterContext, MediaOptions, TextResult, TextOptions } from '../t
 import { TextAdapter } from './base';
 
 // AI Gateway endpoint for Spark (custom provider must be added in Cloudflare dashboard)
-const GATEWAY_SPARK_URL = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/spark-local';
+// Custom providers require 'custom-' prefix in the gateway URL
+const GATEWAY_SPARK_URL = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/custom-spark-local';
 
 // Direct Spark endpoint (via Cloudflare Tunnel)
 const DIRECT_SPARK_URL = 'https://vllm.shiftaltcreate.com';
