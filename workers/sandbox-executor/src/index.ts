@@ -114,6 +114,100 @@ const AI_GATEWAY_URL =
   'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/anthropic';
 
 /**
+ * Default AI Gateway logging URL (base endpoint without /anthropic suffix)
+ */
+const DEFAULT_AI_GATEWAY_LOG_URL =
+  'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway';
+
+/**
+ * Metadata for AI Gateway execution logging
+ */
+interface GatewayLogMetadata {
+  request_id: string;
+  executor: 'claude-runner' | 'gemini-runner' | 'z-ai-runner';
+  task_summary: string;
+  repo_url?: string;
+  start_time: number;
+  end_time?: number;
+  duration_ms?: number;
+  success?: boolean;
+  error?: string;
+  event_type: 'execution_start' | 'execution_end';
+}
+
+/**
+ * Log execution metadata to AI Gateway for unified visibility
+ * This provides a logging layer without changing the execution path
+ *
+ * @param env - Environment bindings
+ * @param metadata - Execution metadata to log
+ */
+async function logToGateway(env: Env, metadata: GatewayLogMetadata): Promise<void> {
+  // Check if logging is enabled
+  if (env.AI_GATEWAY_LOG_ENABLED !== 'true') {
+    return;
+  }
+
+  const logUrl = env.AI_GATEWAY_LOG_URL || DEFAULT_AI_GATEWAY_LOG_URL;
+
+  try {
+    // POST metadata to AI Gateway logging endpoint
+    // Using the /logs endpoint for custom event logging
+    const response = await fetch(`${logUrl}/logs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Include auth token if available for authenticated logging
+        ...(env.CF_AIG_TOKEN && { 'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}` }),
+      },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event_type: metadata.event_type,
+        request_id: metadata.request_id,
+        executor: metadata.executor,
+        task_summary: metadata.task_summary.substring(0, 500), // Truncate for logging
+        repo_url: metadata.repo_url,
+        start_time: metadata.start_time,
+        end_time: metadata.end_time,
+        duration_ms: metadata.duration_ms,
+        success: metadata.success,
+        error: metadata.error?.substring(0, 200), // Truncate error for logging
+      }),
+    });
+
+    if (!response.ok) {
+      // Log failure but don't throw - this is a visibility layer, not critical path
+      console.warn(
+        `[Gateway Log] Failed to log ${metadata.event_type} for ${metadata.request_id}: ${response.status}`
+      );
+    } else {
+      console.log(
+        `[Gateway Log] Logged ${metadata.event_type} for ${metadata.request_id} (executor: ${metadata.executor})`
+      );
+    }
+  } catch (error) {
+    // Non-blocking - log the error but don't fail the execution
+    console.warn(
+      `[Gateway Log] Error logging ${metadata.event_type} for ${metadata.request_id}:`,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+
+/**
+ * Generate a summary of the task for logging purposes
+ * Extracts the first line or first N characters
+ */
+function generateTaskSummary(task: string, maxLength = 100): string {
+  // Get first line or first maxLength chars, whichever is shorter
+  const firstLine = task.split('\n')[0].trim();
+  if (firstLine.length <= maxLength) {
+    return firstLine;
+  }
+  return firstLine.substring(0, maxLength - 3) + '...';
+}
+
+/**
  * Default system prompt for SDK execution
  */
 const DEFAULT_SDK_SYSTEM_PROMPT =
@@ -134,6 +228,7 @@ function getModelId(model?: string): string {
 /**
  * Delegate task execution to on-prem Claude runner
  *
+ * @param env - Environment bindings
  * @param runnerUrl - URL of the on-prem Claude runner (via Cloudflare Tunnel)
  * @param task - Task description/prompt
  * @param repoUrl - Optional repository URL to clone
@@ -142,6 +237,7 @@ function getModelId(model?: string): string {
  * @param options - Additional execution options
  */
 async function delegateToRunner(
+  env: Env,
   runnerUrl: string,
   task: string,
   repoUrl: string | undefined,
@@ -160,6 +256,17 @@ async function delegateToRunner(
   const startTime = Date.now();
 
   console.log(`[RUNNER ${requestId}] Delegating to on-prem runner at ${runnerUrl}`);
+
+  // Log execution start to AI Gateway (non-blocking)
+  const taskSummary = generateTaskSummary(task);
+  logToGateway(env, {
+    request_id: requestId,
+    executor: 'claude-runner',
+    task_summary: taskSummary,
+    repo_url: repoUrl,
+    start_time: startTime,
+    event_type: 'execution_start',
+  });
 
   try {
     // Build headers - include CF-Access credentials if configured
@@ -197,6 +304,21 @@ async function delegateToRunner(
     // Check if runner reports OAuth issues
     if (!result.success && result.error?.includes('OAuth')) {
       console.error(`[RUNNER ${requestId}] Runner OAuth error: ${result.error}`);
+
+      // Log execution end with error to AI Gateway
+      logToGateway(env, {
+        request_id: requestId,
+        executor: 'claude-runner',
+        task_summary: taskSummary,
+        repo_url: repoUrl,
+        start_time: startTime,
+        end_time: Date.now(),
+        duration_ms: totalTime,
+        success: false,
+        error: 'RUNNER_OAUTH_ERROR',
+        event_type: 'execution_end',
+      });
+
       return Response.json(
         {
           success: false,
@@ -216,6 +338,20 @@ async function delegateToRunner(
         }
       );
     }
+
+    // Log execution end to AI Gateway
+    logToGateway(env, {
+      request_id: requestId,
+      executor: 'claude-runner',
+      task_summary: taskSummary,
+      repo_url: repoUrl,
+      start_time: startTime,
+      end_time: Date.now(),
+      duration_ms: totalTime,
+      success: result.success,
+      error: result.success ? undefined : result.error,
+      event_type: 'execution_end',
+    });
 
     // Return runner result formatted for our API
     return Response.json(
@@ -239,7 +375,22 @@ async function delegateToRunner(
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorTime = Date.now();
     console.error(`[RUNNER ${requestId}] Failed to reach runner: ${errorMessage}`);
+
+    // Log execution end with error to AI Gateway
+    logToGateway(env, {
+      request_id: requestId,
+      executor: 'claude-runner',
+      task_summary: taskSummary,
+      repo_url: repoUrl,
+      start_time: startTime,
+      end_time: errorTime,
+      duration_ms: errorTime - startTime,
+      success: false,
+      error: 'RUNNER_UNREACHABLE',
+      event_type: 'execution_end',
+    });
 
     return Response.json(
       {
@@ -248,7 +399,7 @@ async function delegateToRunner(
         error_code: 'RUNNER_UNREACHABLE',
         request_id: requestId,
         metadata: {
-          execution_time_ms: Date.now() - startTime,
+          execution_time_ms: errorTime - startTime,
           runner_url: runnerUrl,
         },
       },
@@ -292,7 +443,7 @@ async function handleExecute(
   console.log(`[EXEC ${requestId}] Delegating to runner: ${runnerUrl}`);
 
   // Delegate to on-prem runner
-  return delegateToRunner(runnerUrl, body.task, body.repo, runnerSecret, requestId, {
+  return delegateToRunner(env, runnerUrl, body.task, body.repo, runnerSecret, requestId, {
     timeout_ms: body.options?.timeout_ms,
   });
 }
@@ -414,6 +565,7 @@ async function handleSDKExecute(
  * Delegate task execution to on-prem Gemini runner
  * This is the preferred path when GEMINI_RUNNER_URL is configured and executor_type is 'gemini'
  *
+ * @param env - Environment bindings
  * @param runnerUrl - URL of the on-prem Gemini runner (via Cloudflare Tunnel)
  * @param task - Task description/prompt
  * @param repoUrl - Optional repository URL to clone
@@ -422,6 +574,7 @@ async function handleSDKExecute(
  * @param options - Additional execution options
  */
 async function delegateToGeminiRunner(
+  env: Env,
   runnerUrl: string,
   task: string,
   repoUrl: string | undefined,
@@ -436,6 +589,17 @@ async function delegateToGeminiRunner(
   const startTime = Date.now();
 
   console.log(`[GEMINI ${requestId}] Delegating to on-prem Gemini runner at ${runnerUrl}`);
+
+  // Log execution start to AI Gateway (non-blocking)
+  const taskSummary = generateTaskSummary(task);
+  logToGateway(env, {
+    request_id: requestId,
+    executor: 'gemini-runner',
+    task_summary: taskSummary,
+    repo_url: repoUrl,
+    start_time: startTime,
+    event_type: 'execution_start',
+  });
 
   try {
     const response = await fetch(`${runnerUrl}/execute`, {
@@ -462,6 +626,21 @@ async function delegateToGeminiRunner(
     // Check if runner reports auth issues
     if (!result.success && result.error?.includes('authentication')) {
       console.error(`[GEMINI ${requestId}] Runner auth error: ${result.error}`);
+
+      // Log execution end with error to AI Gateway
+      logToGateway(env, {
+        request_id: requestId,
+        executor: 'gemini-runner',
+        task_summary: taskSummary,
+        repo_url: repoUrl,
+        start_time: startTime,
+        end_time: Date.now(),
+        duration_ms: totalTime,
+        success: false,
+        error: 'GEMINI_AUTH_ERROR',
+        event_type: 'execution_end',
+      });
+
       return Response.json({
         success: false,
         error: result.error,
@@ -478,6 +657,20 @@ async function delegateToGeminiRunner(
         headers: { 'X-Request-ID': requestId },
       });
     }
+
+    // Log execution end to AI Gateway
+    logToGateway(env, {
+      request_id: requestId,
+      executor: 'gemini-runner',
+      task_summary: taskSummary,
+      repo_url: repoUrl,
+      start_time: startTime,
+      end_time: Date.now(),
+      duration_ms: totalTime,
+      success: result.success,
+      error: result.success ? undefined : result.error,
+      event_type: 'execution_end',
+    });
 
     // Return runner result formatted for our API
     return Response.json({
@@ -500,7 +693,22 @@ async function delegateToGeminiRunner(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorTime = Date.now();
     console.error(`[GEMINI ${requestId}] Failed to reach runner: ${errorMessage}`);
+
+    // Log execution end with error to AI Gateway
+    logToGateway(env, {
+      request_id: requestId,
+      executor: 'gemini-runner',
+      task_summary: taskSummary,
+      repo_url: repoUrl,
+      start_time: startTime,
+      end_time: errorTime,
+      duration_ms: errorTime - startTime,
+      success: false,
+      error: 'GEMINI_RUNNER_UNREACHABLE',
+      event_type: 'execution_end',
+    });
 
     // Runner unreachable - return error
     return Response.json({
@@ -509,7 +717,7 @@ async function delegateToGeminiRunner(
       error_code: 'GEMINI_RUNNER_UNREACHABLE',
       request_id: requestId,
       metadata: {
-        execution_time_ms: Date.now() - startTime,
+        execution_time_ms: errorTime - startTime,
         runner_url: runnerUrl,
         delegated_to_runner: true,
         executor_type: 'gemini',
@@ -619,6 +827,7 @@ export default {
             console.log(`[EXEC ${requestId}] Gemini executor requested, delegating to Gemini runner...`);
 
             const geminiResponse = await delegateToGeminiRunner(
+              env,
               env.GEMINI_RUNNER_URL,
               body.task,
               body.repo,
@@ -649,6 +858,7 @@ export default {
           console.log(`[EXEC ${requestId}] On-prem Claude runner configured, delegating...`);
 
           const runnerResponse = await delegateToRunner(
+            env,
             env.CLAUDE_RUNNER_URL,
             body.task,
             body.repo,

@@ -12,6 +12,105 @@
 
 import type { Env, IntakePayload, IntakeResponse, ErrorResponse, StoredRequest } from './types';
 
+/**
+ * Keywords that indicate a code execution request
+ */
+const CODE_KEYWORDS = [
+  'code',
+  'implement',
+  'fix',
+  'debug',
+  'refactor',
+  'write a function',
+  'write a class',
+  'create a script',
+  'build a',
+  'develop',
+  'program',
+  'bug',
+  'error in',
+  'pull request',
+  'PR',
+  'commit',
+  'merge',
+];
+
+/**
+ * URL patterns that indicate a code repository
+ */
+const REPO_URL_PATTERNS = [
+  /github\.com\/[\w-]+\/[\w.-]+/i,
+  /gitlab\.com\/[\w-]+\/[\w.-]+/i,
+  /bitbucket\.org\/[\w-]+\/[\w.-]+/i,
+  /git@github\.com:/i,
+  /git@gitlab\.com:/i,
+];
+
+/**
+ * Classify request type based on content and explicit type
+ * Returns 'code' if the request appears to be a code execution task
+ */
+function classifyRequestType(body: IntakePayload): 'code' | 'video' | 'other' {
+  // 1. Explicit task_type takes precedence
+  if (body.task_type === 'code') {
+    return 'code';
+  }
+
+  if (body.task_type === 'video' || body.timeline) {
+    return 'video';
+  }
+
+  // 2. Check for repo_url field (strong signal for code task)
+  if (body.repo_url) {
+    return 'code';
+  }
+
+  // 3. Check for executor field (explicit code execution request)
+  if (body.executor) {
+    return 'code';
+  }
+
+  // 4. Check query for repository URLs
+  const query = body.query || body.prompt || '';
+  for (const pattern of REPO_URL_PATTERNS) {
+    if (pattern.test(query)) {
+      return 'code';
+    }
+  }
+
+  // 5. Check for code-related keywords in query
+  const lowerQuery = query.toLowerCase();
+  for (const keyword of CODE_KEYWORDS) {
+    if (lowerQuery.includes(keyword.toLowerCase())) {
+      // Additional check: make sure it's not just talking about code
+      // in the context of content generation
+      if (body.task_type === 'text' || body.task_type === 'image') {
+        return 'other';
+      }
+      return 'code';
+    }
+  }
+
+  return 'other';
+}
+
+/**
+ * Extract repo URL from query if present
+ */
+function extractRepoUrl(query: string): string | undefined {
+  for (const pattern of REPO_URL_PATTERNS) {
+    const match = query.match(pattern);
+    if (match) {
+      // Return full GitHub/GitLab URL
+      const urlMatch = query.match(/https?:\/\/(github|gitlab|bitbucket)\.[a-z]+\/[\w-]+\/[\w.-]+/i);
+      if (urlMatch) {
+        return urlMatch[0];
+      }
+    }
+  }
+  return undefined;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const requestId = crypto.randomUUID();
@@ -153,8 +252,11 @@ async function handleIntake(
       storedRequest.completed_at
     ).run();
 
+    // Classify request type
+    const requestType = classifyRequestType(body);
+
     // Check if this is a video render request - route to VideoRenderWorkflow
-    if (body.task_type === 'video' || body.timeline) {
+    if (requestType === 'video') {
       // Validate timeline is present for video requests
       if (!body.timeline) {
         return createErrorResponse(
@@ -221,7 +323,75 @@ async function handleIntake(
       }
     }
 
-    // For non-video requests, continue with existing Router DO flow
+    // Check if this is a code execution request - route to CodeExecutionWorkflow
+    if (requestType === 'code') {
+      const prompt = body.prompt || body.query;
+      const repoUrl = body.repo_url || extractRepoUrl(prompt);
+      const taskId = body.task_id || requestId;
+
+      console.log(`[INTAKE ${requestId}] Code request detected, routing to CodeExecutionWorkflow`);
+
+      try {
+        // Create CodeExecutionWorkflow instance
+        const instance = await env.CODE_EXECUTION_WORKFLOW.create({
+          id: requestId,
+          params: {
+            task_id: taskId,
+            request_id: requestId,
+            app_id: appId,
+            instance_id: instanceId,
+            prompt: prompt,
+            repo_url: repoUrl,
+            preferred_executor: body.executor || 'claude',
+            callback_url: body.callback_url,
+            metadata: body.metadata,
+          },
+        });
+
+        // Update D1 with workflow tracking info
+        await env.DB.prepare(`
+          UPDATE requests SET
+            status = 'processing',
+            task_type = 'code',
+            workflow_instance_id = ?,
+            workflow_name = 'code-execution-workflow',
+            started_at = ?
+          WHERE id = ?
+        `).bind(instance.id, now, requestId).run();
+
+        // Return success with workflow info
+        return Response.json({
+          success: true,
+          request_id: requestId,
+          status: 'queued',
+          workflow_instance_id: instance.id,
+          workflow_name: 'code-execution-workflow',
+          message: 'Code execution workflow started',
+        } as IntakeResponse, {
+          status: 202,
+          headers: { 'X-Request-ID': requestId },
+        });
+      } catch (error) {
+        console.error('Failed to start CodeExecutionWorkflow:', error);
+
+        // Update D1 with error
+        await env.DB.prepare(`
+          UPDATE requests SET status = 'failed', error_message = ? WHERE id = ?
+        `).bind(
+          error instanceof Error ? error.message : 'Workflow creation failed',
+          requestId
+        ).run();
+
+        return createErrorResponse(
+          error instanceof Error ? error.message : 'Failed to start code execution workflow',
+          'WORKFLOW_ERROR',
+          requestId,
+          500
+        );
+      }
+    }
+
+    // For non-workflow requests, continue with existing Router DO flow
     // Notify Request Router DO
     const routerId = env.REQUEST_ROUTER.idFromName('global-router');
     const router = env.REQUEST_ROUTER.get(routerId);

@@ -19,6 +19,10 @@ enabled = true
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
 MAX_EXECUTION_TIME = "300000"
 
+# AI Gateway Logging Configuration
+# Set AI_GATEWAY_LOG_ENABLED = "true" to enable execution logging to AI Gateway
+AI_GATEWAY_LOG_ENABLED = "false"
+
 # Secrets (set with: wrangler secret put <NAME>)
 # - CF_AIG_TOKEN (for SDK mode via AI Gateway)
 # - GITHUB_PAT (for repo creation - requires 'repo' and 'admin:org' scopes)
@@ -29,6 +33,7 @@ MAX_EXECUTION_TIME = "300000"
 # - GEMINI_RUNNER_URL (on-prem Gemini runner URL via Cloudflare Tunnel)
 # - GEMINI_RUNNER_SECRET (secret for authenticating with on-prem Gemini runner)
 # - INTERNAL_API_KEY (for config-service internal API calls)
+# - AI_GATEWAY_LOG_URL (optional: override for AI Gateway log endpoint)
 
 # Migration to remove Sandbox Durable Object
 [[migrations]]

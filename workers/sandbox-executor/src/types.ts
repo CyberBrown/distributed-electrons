@@ -35,6 +35,13 @@ export interface Env {
 
   // Max execution time in ms
   MAX_EXECUTION_TIME?: string;
+
+  // AI Gateway logging configuration
+  // URL for logging execution metadata (defaults to standard gateway URL + /log)
+  AI_GATEWAY_LOG_URL?: string;
+
+  // Feature flag to enable AI Gateway logging (set to 'true' to enable)
+  AI_GATEWAY_LOG_ENABLED?: string;
 }
 
 /**

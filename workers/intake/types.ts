@@ -10,6 +10,7 @@ export interface Env {
 
   // Cloudflare Workflows
   VIDEO_RENDER_WORKFLOW: Workflow;
+  CODE_EXECUTION_WORKFLOW: Workflow;
 
   // D1 Database
   DB: D1Database;
@@ -88,7 +89,7 @@ export interface IntakePayload {
   query: string;
   app_id?: string;
   instance_id?: string;
-  task_type?: 'text' | 'image' | 'audio' | 'video' | 'context';
+  task_type?: 'text' | 'image' | 'audio' | 'video' | 'code' | 'context';
   provider?: string;
   model?: string;
   priority?: number;
@@ -97,6 +98,11 @@ export interface IntakePayload {
   // Video rendering specific fields
   timeline?: Timeline;
   output?: OutputConfig;
+  // Code execution specific fields
+  repo_url?: string;
+  executor?: 'claude' | 'gemini';
+  task_id?: string;
+  prompt?: string;  // Alternative to query for code tasks
 }
 
 // Response to client

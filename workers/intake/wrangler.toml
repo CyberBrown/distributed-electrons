@@ -33,6 +33,13 @@ binding = "VIDEO_RENDER_WORKFLOW"
 class_name = "VideoRenderWorkflow"
 script_name = "de-workflows"
 
+# CodeExecutionWorkflow (Cloudflare Workflow for code tasks)
+[[workflows]]
+name = "code-execution-workflow"
+binding = "CODE_EXECUTION_WORKFLOW"
+class_name = "CodeExecutionWorkflow"
+script_name = "de-workflows"
+
 # Environment Variables
 [vars]
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
