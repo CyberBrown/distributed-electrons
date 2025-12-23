@@ -4,6 +4,7 @@
  */
 
 export { VideoRenderWorkflow } from './VideoRenderWorkflow';
+export { CodeExecutionWorkflow } from './CodeExecutionWorkflow';
 
 // Future workflows:
 // export { BatchProcessWorkflow } from './BatchProcessWorkflow';
@@ -21,14 +22,14 @@ export default {
       return Response.json({
         status: 'healthy',
         service: 'de-workflows',
-        workflows: ['video-render-workflow'],
+        workflows: ['video-render-workflow', 'code-execution-workflow'],
         timestamp: new Date().toISOString(),
       });
     }
 
     return Response.json({
       error: 'Workflows are invoked via bindings, not HTTP',
-      available_workflows: ['video-render-workflow'],
+      available_workflows: ['video-render-workflow', 'code-execution-workflow'],
     }, { status: 400 });
   },
 };

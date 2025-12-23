@@ -15,6 +15,12 @@ name = "video-render-workflow"
 binding = "VIDEO_RENDER_WORKFLOW"
 class_name = "VideoRenderWorkflow"
 
+# CodeExecutionWorkflow - handles code execution with fallover
+[[workflows]]
+name = "code-execution-workflow"
+binding = "CODE_EXECUTION_WORKFLOW"
+class_name = "CodeExecutionWorkflow"
+
 # D1 Database binding (shared DE database)
 [[d1_databases]]
 binding = "DB"
@@ -30,9 +36,19 @@ database_id = "7cff30a0-c974-4ede-b96a-c91dd2f0c870"
 [vars]
 DELIVERY_URL = "https://delivery.distributedelectrons.com"
 SHOTSTACK_ENV = "stage"
+CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
+CLAUDE_RUNNER_URL = "https://claude-runner.shiftaltcreate.com"
+GEMINI_RUNNER_URL = "https://gemini-runner.shiftaltcreate.com"
+NEXUS_API_URL = "https://nexus-mcp.solamp.workers.dev"
 
 # Secrets (set via wrangler secret put):
 # - SHOTSTACK_API_KEY
+# - RUNNER_SECRET (for claude-runner auth)
+# - GEMINI_RUNNER_SECRET (for gemini-runner auth)
+# - CF_ACCESS_CLIENT_ID (optional - for Cloudflare Access protected runners)
+# - CF_ACCESS_CLIENT_SECRET (optional - for Cloudflare Access protected runners)
+# - NEXUS_PASSPHRASE (for Nexus MCP server write access)
+# - NTFY_TOPIC (optional - for quarantine notifications)
 
 # Custom Domain (optional)
 # [[routes]]
