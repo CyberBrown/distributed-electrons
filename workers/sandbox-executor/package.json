@@ -1,22 +1,21 @@
 {
   "name": "@distributed-electrons/sandbox-executor",
-  "version": "1.0.0",
-  "devDependencies": {
-    "@cloudflare/sandbox": "^0.6.6",
-    "@types/node": "^20.10.0",
-    "typescript": "^5.9.3",
-    "wrangler": "^4.53.0"
-  },
-  "description": "Cloudflare Worker for executing Claude Agent SDK tasks in sandboxed containers",
+  "version": "2.0.0",
+  "description": "Cloudflare Worker for delegating Claude tasks to on-prem runner",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "types": "wrangler types",
     "typecheck": "wrangler types && tsc --noEmit"
   },
-  "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.53.0"
   }
 }
