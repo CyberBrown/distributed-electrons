@@ -6,6 +6,7 @@ services:
     build: .
     container_name: claude-runner
     restart: unless-stopped
+    init: true  # Prevents zombie processes
     volumes:
       # Persistent OAuth credentials - mount from host
       - ${CLAUDE_CONFIG_PATH:-~/.claude}:/root/.claude:rw
@@ -16,6 +17,8 @@ services:
     environment:
       # Required: Secret for authenticating requests from sandbox-executor
       - RUNNER_SECRET=${RUNNER_SECRET}
+      # Optional: GitHub PAT for cloning private repos
+      - GITHUB_PAT=${GITHUB_PAT:-}
       # Optional: Config service URL for status updates
       - CONFIG_SERVICE_URL=${CONFIG_SERVICE_URL:-}
       # Optional: Internal API key for config service

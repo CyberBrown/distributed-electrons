@@ -19,6 +19,7 @@ import * as path from 'path';
 const app = express();
 const PORT = process.env.PORT || 8787;
 const RUNNER_SECRET = process.env.RUNNER_SECRET;
+const GITHUB_PAT = process.env.GITHUB_PAT;
 const REPOS_DIR = '/repos';
 const NTFY_TOPIC = process.env.NTFY_TOPIC || 'nexus-oauth-expired';
 const NTFY_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
@@ -233,25 +234,63 @@ function checkOAuthStatus(): { configured: boolean; expired: boolean; expires_at
 }
 
 /**
+ * Normalize repo input to full GitHub URL
+ * Accepts:
+ *   - 'owner/repo' -> 'https://github.com/owner/repo'
+ *   - 'https://github.com/owner/repo' -> as-is
+ *   - 'https://github.com/owner/repo.git' -> as-is
+ */
+function normalizeRepoUrl(repoInput: string): { url: string; owner: string; name: string } {
+  // Strip any trailing .git and protocol prefix to get clean owner/repo
+  const cleaned = repoInput
+    .replace(/^https?:\/\/github\.com\//, '')
+    .replace(/\.git$/, '');
+
+  const parts = cleaned.split('/');
+  if (parts.length < 2 || !parts[0] || !parts[1]) {
+    throw new Error(`Invalid repo format: "${repoInput}". Expected "owner/repo" or GitHub URL.`);
+  }
+
+  const owner = parts[0];
+  const name = parts[1];
+
+  return {
+    url: `https://github.com/${owner}/${name}.git`,
+    owner,
+    name,
+  };
+}
+
+/**
  * Clone or update a git repository
  */
-async function prepareRepo(repoUrl: string): Promise<string> {
-  // Create hash of repo URL for directory name
-  const repoHash = Buffer.from(repoUrl).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
-  const repoDir = path.join(REPOS_DIR, repoHash);
+async function prepareRepo(repoInput: string): Promise<string> {
+  // Normalize input - accept both 'owner/repo' and full URLs
+  const { url: repoUrl, owner, name } = normalizeRepoUrl(repoInput);
 
+  // Use authenticated URL if GITHUB_PAT is available (for private repos)
+  const cloneUrl = GITHUB_PAT
+    ? `https://x-access-token:${GITHUB_PAT}@github.com/${owner}/${name}.git`
+    : repoUrl;
+
+  // Use readable directory name: owner-repo
+  const repoDir = path.join(REPOS_DIR, `${owner}-${name}`);
+
+  // Ensure workspace directory exists
   if (!fs.existsSync(REPOS_DIR)) {
     fs.mkdirSync(REPOS_DIR, { recursive: true });
   }
 
   if (fs.existsSync(repoDir)) {
     // Update existing repo
+    console.log(`Updating existing repo at ${repoDir}`);
     await runCommand('git', ['fetch', '--all'], repoDir);
     await runCommand('git', ['reset', '--hard', 'origin/HEAD'], repoDir);
     await runCommand('git', ['clean', '-fdx'], repoDir);
   } else {
-    // Clone new repo
-    await runCommand('git', ['clone', repoUrl, repoDir], REPOS_DIR);
+    // Clone new repo (log without token for security)
+    console.log(`Cloning ${repoUrl} to ${repoDir}${GITHUB_PAT ? ' (authenticated)' : ''}`);
+    await runCommand('git', ['clone', cloneUrl, repoDir], REPOS_DIR);
   }
 
   return repoDir;

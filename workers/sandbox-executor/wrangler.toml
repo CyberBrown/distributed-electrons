@@ -1,5 +1,6 @@
 # Sandbox Executor Worker Configuration
-# Executes Claude Agent SDK tasks in isolated Cloudflare Sandbox containers
+# Delegates Claude CLI execution to on-prem runner via Cloudflare Tunnel
+# Also supports SDK mode via AI Gateway for lightweight queries
 
 name = "sandbox-executor"
 main = "src/index.ts"
@@ -13,32 +14,12 @@ workers_dev = true
 [observability]
 enabled = true
 
-# Container configuration for Sandbox SDK
-# TEMPORARILY DISABLED - using on-prem runner instead
-# [[containers]]
-# class_name = "Sandbox"
-# image = "./Dockerfile"
-# instance_type = "basic"
-
-# Durable Objects bindings for Sandbox
-# TEMPORARILY DISABLED - using on-prem runner instead
-# [durable_objects]
-# bindings = [
-#   { name = "Sandbox", class_name = "Sandbox" }
-# ]
-
-# Database migrations for Durable Object
-# [[migrations]]
-# tag = "v1"
-# new_sqlite_classes = ["Sandbox"]
-
 # Environment Variables
 [vars]
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
 MAX_EXECUTION_TIME = "300000"
 
 # Secrets (set with: wrangler secret put <NAME>)
-# - ANTHROPIC_API_KEY (for Claude execution in sandbox)
 # - CF_AIG_TOKEN (for SDK mode via AI Gateway)
 # - GITHUB_PAT (for repo creation - requires 'repo' and 'admin:org' scopes)
 # - CLAUDE_RUNNER_URL (on-prem Claude runner URL via Cloudflare Tunnel)
@@ -48,6 +29,11 @@ MAX_EXECUTION_TIME = "300000"
 # - GEMINI_RUNNER_URL (on-prem Gemini runner URL via Cloudflare Tunnel)
 # - GEMINI_RUNNER_SECRET (secret for authenticating with on-prem Gemini runner)
 # - INTERNAL_API_KEY (for config-service internal API calls)
+
+# Migration to remove Sandbox Durable Object
+[[migrations]]
+tag = "v2"
+deleted_classes = ["Sandbox"]
 
 # Custom Domain (uncomment when ready for production)
 # [[routes]]
