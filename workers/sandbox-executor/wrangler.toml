@@ -25,6 +25,11 @@ MAX_EXECUTION_TIME = "300000"
 # - RUNNER_SECRET (secret for authenticating with on-prem runner)
 # - INTERNAL_API_KEY (for config-service internal API calls)
 
+# Migration to remove Sandbox Durable Object
+[[migrations]]
+tag = "v2"
+deleted_classes = ["Sandbox"]
+
 # Custom Domain (uncomment when ready for production)
 # [[routes]]
 # pattern = "sandbox.distributedelectrons.com"
