@@ -16,6 +16,10 @@ import {
   validatePayloadMapping,
   type PayloadMapping,
 } from '../shared/utils/payload-mapper';
+import {
+  fetchModelConfigCached,
+  getInstanceConfigCached,
+} from '../shared/config-cache';
 import type {
   Env,
   GenerateRequest,
@@ -146,10 +150,8 @@ async function handleGenerate(
       env.DEFAULT_INSTANCE_ID ||
       'default';
 
-    // Step 1: Get instance configuration
-    // Note: In production, this would call Team 1's Config Service
-    // For now, we'll create a mock config
-    const instanceConfig = await getInstanceConfig(instanceId, env);
+    // Step 1: Get instance configuration (cached)
+    const instanceConfig = getInstanceConfigCached(instanceId, env);
 
     if (!instanceConfig) {
       return createErrorResponse(
@@ -160,15 +162,16 @@ async function handleGenerate(
       );
     }
 
-    // Step 2: Determine model_id and fetch configuration
+    // Step 2: Determine model_id and fetch configuration (cached)
     // Support both 'model' and 'model_id' parameters for backwards compatibility
     const modelId = body.model_id || body.model || getDefaultModelId(env);
     let modelConfig: ModelConfig | null = null;
     let useModelConfig = false;
 
-    // Attempt to fetch model config
+    // Attempt to fetch model config (with caching)
     console.log(`Attempting to fetch model config for: ${modelId}`);
-    modelConfig = await fetchModelConfig(modelId, env);
+    const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+    modelConfig = await fetchModelConfigCached(modelId, configServiceUrl);
 
     if (modelConfig) {
       console.log(`Using dynamic model config for: ${modelConfig.model_id}`);
@@ -356,82 +359,7 @@ function getDefaultModelId(env: Env): string {
   return env.DEFAULT_MODEL_ID || 'ideogram-v2';
 }
 
-/**
- * Get instance configuration
- * Note: This is a mock implementation. In production, this would call
- * Team 1's Config Service to get the real configuration from D1.
- */
-async function getInstanceConfig(
-  instanceId: string,
-  env: Env
-): Promise<InstanceConfig | null> {
-  // Mock configuration for MVP
-  // In production, this would query Team 1's Config Service
-  return {
-    instance_id: instanceId,
-    org_id: 'your-org-id',
-    api_keys: {
-      // These would come from D1 database in production
-      ideogram: env.IDEOGRAM_API_KEY || 'ide_mock_key',
-      gemini: env.GEMINI_API_KEY || '',
-      openai: env.OPENAI_API_KEY || '',
-    },
-    rate_limits: {
-      ideogram: {
-        rpm: 100,
-        tpm: 50000,
-      },
-    },
-    r2_bucket: 'production-images',
-  };
-}
-
-/**
- * Fetch model configuration from Config Service
- * Returns null if fetch fails (for fallback handling)
- */
-async function fetchModelConfig(
-  modelId: string,
-  env: Env
-): Promise<ModelConfig | null> {
-  try {
-    const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
-    const url = `${configServiceUrl}/model-config/${modelId}`;
-
-    console.log(`Fetching model config from: ${url}`);
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      console.error(`Failed to fetch model config: ${response.status} ${response.statusText}`);
-      return null;
-    }
-
-    const result = await response.json() as { data: ModelConfig };
-
-    if (!result.data) {
-      console.error('Model config response missing data field');
-      return null;
-    }
-
-    // Validate payload mapping structure
-    if (!validatePayloadMapping(result.data.payload_mapping)) {
-      console.error('Invalid payload mapping structure in model config');
-      return null;
-    }
-
-    console.log(`Successfully fetched config for model: ${result.data.model_id}`);
-    return result.data;
-  } catch (error) {
-    console.error('Error fetching model config:', error);
-    return null;
-  }
-}
+// Config functions moved to shared/config-cache for caching support
 
 /**
  * Generate image using dynamic model config and payload mapping

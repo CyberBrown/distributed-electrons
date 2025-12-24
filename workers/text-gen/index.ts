@@ -18,6 +18,10 @@ import {
   applyResponseMapping,
   validatePayloadMapping,
 } from '../shared/utils/payload-mapper';
+import {
+  fetchModelConfigCached,
+  getInstanceConfigCached,
+} from '../shared/config-cache';
 import { createRouter, LLMRouter } from './llm-router';
 import { generateWithSparkLocal } from './spark-provider';
 // Phase 2 Router
@@ -225,8 +229,8 @@ async function handleGenerate(
       env.DEFAULT_INSTANCE_ID ||
       'default';
 
-    // Get instance configuration
-    const instanceConfig = await getInstanceConfig(instanceId, env);
+    // Get instance configuration (cached)
+    const instanceConfig = getInstanceConfigCached(instanceId, env);
 
     if (!instanceConfig) {
       return createErrorResponse(
@@ -243,7 +247,8 @@ async function handleGenerate(
     if (body.model_id) {
       console.log(`Fetching model config for: ${body.model_id}`);
 
-      const modelConfig = await fetchModelConfig(body.model_id, env);
+      const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+      const modelConfig = await fetchModelConfigCached(body.model_id, configServiceUrl);
 
       if (modelConfig) {
         // Verify this is a text generation model
@@ -635,72 +640,7 @@ function getEnvApiKey(provider: string, env: Env): string | undefined {
   return undefined;
 }
 
-/**
- * Get instance configuration
- * Mock implementation for MVP
- */
-async function getInstanceConfig(
-  instanceId: string,
-  env: Env
-): Promise<InstanceConfig | null> {
-  // Mock configuration for MVP
-  // In production, this would query the Config Service
-  return {
-    instance_id: instanceId,
-    org_id: 'solamp',
-    api_keys: {
-      openai: env.OPENAI_API_KEY || '',
-      anthropic: env.ANTHROPIC_API_KEY || '',
-    },
-    rate_limits: {
-      openai: {
-        rpm: 100,
-        tpm: 50000,
-      },
-      anthropic: {
-        rpm: 50,
-        tpm: 50000,
-      },
-    },
-  };
-}
-
-/**
- * Fetch model configuration from Config Service
- */
-async function fetchModelConfig(
-  modelId: string,
-  env: Env
-): Promise<ModelConfig | null> {
-  const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
-  const url = `${configServiceUrl}/model-config/${modelId}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      console.error(`Failed to fetch model config for ${modelId}: ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json() as any;
-
-    // The config service returns { data: ModelConfig, request_id: string }
-    if (data && data.data) {
-      return data.data as ModelConfig;
-    }
-
-    return null;
-  } catch (error) {
-    console.error(`Error fetching model config for ${modelId}:`, error);
-    return null;
-  }
-}
+// Config functions moved to shared/config-cache for caching support
 
 /**
  * Handle streaming text generation request
@@ -731,8 +671,8 @@ async function handleGenerateStream(
       env.DEFAULT_INSTANCE_ID ||
       'default';
 
-    // Get instance configuration
-    const instanceConfig = await getInstanceConfig(instanceId, env);
+    // Get instance configuration (cached)
+    const instanceConfig = getInstanceConfigCached(instanceId, env);
 
     if (!instanceConfig) {
       return createErrorResponse(
