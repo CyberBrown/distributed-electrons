@@ -284,34 +284,32 @@ async function executeGemini(
   sandbox?: boolean
 ): Promise<{ output: string; exitCode: number }> {
   return new Promise((resolve) => {
-    // Build command parts - Gemini uses positional prompt, not -p flag
-    const cmdParts = ['gemini'];
+    // Build command arguments - spawn directly without shell to avoid injection
+    const args: string[] = [];
 
     // Add model if specified
     if (model) {
-      cmdParts.push('-m', model);
+      args.push('-m', model);
     }
 
     // Add sandbox mode if requested (restricts file system access)
     if (sandbox) {
-      cmdParts.push('--sandbox');
+      args.push('--sandbox');
     }
 
     // Auto-approve all actions for non-interactive execution
-    cmdParts.push('--yolo');
+    args.push('--yolo');
 
     // Output format for easier parsing
-    cmdParts.push('--output-format', 'text');
+    args.push('--output-format', 'text');
 
-    // Escape prompt for shell - positional argument at end
-    const escapedPrompt = prompt.replace(/'/g, "'\\''");
-    cmdParts.push(`'${escapedPrompt}'`);
+    // Prompt as positional argument (no shell escaping needed - spawn handles it safely)
+    args.push(prompt);
 
-    // Redirect stderr to stdout and close stdin
-    const fullCommand = `${cmdParts.join(' ')} 2>&1 </dev/null`;
-    console.log(`Executing: ${fullCommand} in ${workingDir}`);
+    console.log(`Executing: gemini ${args.slice(0, -1).join(' ')} "<prompt>" in ${workingDir}`);
 
-    const proc: ChildProcess = spawn('sh', ['-c', fullCommand], {
+    // Spawn gemini directly without shell - prevents shell injection
+    const proc: ChildProcess = spawn('gemini', args, {
       cwd: workingDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
