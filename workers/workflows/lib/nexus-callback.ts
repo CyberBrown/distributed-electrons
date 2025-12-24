@@ -77,19 +77,6 @@ async function markTaskComplete(
   passphrase: string,
   result: NexusExecutionResult
 ): Promise<boolean> {
-  // Build payload for potential future use (currently using inline object for simplified endpoint)
-  const _payload: NexusTaskUpdatePayload = {
-    task_id: result.task_id,
-    status: 'completed',
-    result: {
-      output: result.output,
-      executor: result.executor_used,
-      duration_ms: result.duration_ms,
-      exit_code: result.exit_code,
-    },
-  };
-
-  // Use the complete_task endpoint with notes containing the result
   const response = await fetch(`${nexusUrl}${API_PREFIX}/tasks/${result.task_id}/complete`, {
     method: 'POST',
     headers: {

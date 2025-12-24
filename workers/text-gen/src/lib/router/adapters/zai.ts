@@ -7,8 +7,8 @@
 import type { AdapterContext, MediaOptions, TextResult, TextOptions } from '../types';
 import { TextAdapter } from './base';
 
-// AI Gateway endpoint for z.ai (reserved for future BYOK integration)
-const _GATEWAY_ZAI_URL = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/zai';
+// Note: AI Gateway custom provider BYOK not working for z.ai
+// Direct API used until Gateway issue is resolved
 
 export class ZaiAdapter extends TextAdapter {
   readonly providerId = 'zai';

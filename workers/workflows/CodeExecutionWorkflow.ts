@@ -19,16 +19,12 @@
  */
 
 import { WorkflowEntrypoint, WorkflowStep, type WorkflowEvent } from 'cloudflare:workers';
-import type { CodeExecutionParams, ExecutionResult, RunnerResponse } from './types';
+import type { CodeExecutionParams, ExecutionResult } from './types';
 import type { NexusEnv } from './lib/nexus-callback';
 import { reportToNexus } from './lib/nexus-callback';
 
 // Default sandbox-executor URL
 const DEFAULT_SANDBOX_EXECUTOR_URL = 'https://sandbox-executor.solamp.workers.dev';
-
-// Default runner URLs (for fallback if sandbox-executor not configured)
-const DEFAULT_CLAUDE_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
-const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini-runner.shiftaltcreate.com';
 
 // Error classification types
 type ErrorAction = 'retry' | 'try-fallback' | 'quarantine';
@@ -54,7 +50,7 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
       prompt,
       repo_url,
       preferred_executor = 'claude',
-      context,
+      context: _context,
       callback_url,
       timeout_ms = 300000, // 5 minutes default
     } = event.payload;

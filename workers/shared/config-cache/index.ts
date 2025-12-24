@@ -8,6 +8,17 @@
  * This eliminates per-request config service calls.
  */
 
+// PayloadMapping interface for API config
+export interface PayloadMapping {
+  endpoint: string;
+  method: string;
+  headers: Record<string, string>;
+  body: unknown;
+  response_mapping: Record<string, string>;
+  defaults?: Record<string, unknown>;
+  transformations?: Record<string, string>;
+}
+
 export interface ModelConfig {
   model_id: string;
   display_name: string;
@@ -17,12 +28,21 @@ export interface ModelConfig {
     image?: boolean;
     audio?: boolean;
     video?: boolean;
+    [key: string]: boolean | undefined;
   };
-  payload_mapping?: Record<string, unknown>;
+  payload_mapping?: PayloadMapping;
   rate_limits?: {
     rpm: number;
     tpm: number;
   };
+  // Additional fields from Config Service
+  config_id?: string;
+  description?: string;
+  pricing?: Record<string, unknown>;
+  prompt_template?: Record<string, unknown>;
+  status?: 'active' | 'beta' | 'deprecated' | string;
+  created_at?: string;
+  updated_at?: string;
   [key: string]: unknown;
 }
 

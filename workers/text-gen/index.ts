@@ -9,7 +9,6 @@ import type {
   GenerateRequest,
   GenerateResponse,
   TextResult,
-  ModelConfig,
 } from './types';
 import {
   applyPayloadMapping,
@@ -19,6 +18,7 @@ import {
 import {
   fetchModelConfigCached,
   getInstanceConfigCached,
+  type ModelConfig,
 } from '../shared/config-cache';
 import {
   addCorsHeaders,
@@ -413,7 +413,12 @@ async function generateWithModelConfig(
 ): Promise<TextResult> {
   const { payload_mapping, provider_id, model_id } = modelConfig;
 
-  // Validate payload mapping
+  // Validate payload mapping exists
+  if (!payload_mapping) {
+    throw new Error('Missing payload_mapping in model config');
+  }
+
+  // Validate payload mapping structure
   if (!validatePayloadMapping(payload_mapping)) {
     throw new Error('Invalid payload mapping in model config');
   }

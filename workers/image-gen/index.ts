@@ -13,11 +13,11 @@ import {
 import {
   applyPayloadMapping,
   applyResponseMapping,
-  type PayloadMapping,
 } from '../shared/utils/payload-mapper';
 import {
   fetchModelConfigCached,
   getInstanceConfigCached,
+  type ModelConfig,
 } from '../shared/config-cache';
 import {
   addCorsHeaders,
@@ -28,7 +28,6 @@ import type {
   Env,
   GenerateRequest,
   GenerateResponse,
-  ModelConfig,
 } from './types';
 
 export default {
@@ -359,6 +358,12 @@ async function generateWithModelConfig(
 ): Promise<{ imageData: ArrayBuffer; metadata: any }> {
   const startTime = Date.now();
 
+  // Validate payload_mapping exists
+  const { payload_mapping } = modelConfig;
+  if (!payload_mapping) {
+    throw new Error('Missing payload_mapping in model config');
+  }
+
   // Prepare user inputs for payload mapping
   const userInputs = {
     user_prompt: prompt,
@@ -367,12 +372,12 @@ async function generateWithModelConfig(
 
   // Apply payload mapping to create provider request
   const providerRequest = applyPayloadMapping(
-    modelConfig.payload_mapping as PayloadMapping,
+    payload_mapping,
     userInputs,
     apiKey
   );
 
-  console.log(`Calling provider endpoint: ${modelConfig.payload_mapping.endpoint}`);
+  console.log(`Calling provider endpoint: ${payload_mapping.endpoint}`);
 
   // Construct full API URL
   const baseUrl = getProviderBaseUrl(modelConfig.provider_id);
@@ -396,7 +401,7 @@ async function generateWithModelConfig(
   // Extract job_id from response using response mapping
   const mappedResponse = applyResponseMapping(
     submitResult,
-    modelConfig.payload_mapping.response_mapping
+    payload_mapping.response_mapping
   );
 
   const jobId = mappedResponse.job_id;
@@ -411,7 +416,7 @@ async function generateWithModelConfig(
     modelConfig.provider_id,
     jobId,
     apiKey,
-    modelConfig.payload_mapping.response_mapping,
+    payload_mapping.response_mapping,
     60000, // 60 second timeout
     2000 // Poll every 2 seconds
   );

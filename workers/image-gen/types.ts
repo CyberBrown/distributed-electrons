@@ -57,6 +57,9 @@ export interface Env {
   IDEOGRAM_API_KEY?: string;
   GEMINI_API_KEY?: string;
   OPENAI_API_KEY?: string;
+
+  // Index signature for compatibility with shared config-cache
+  [key: string]: unknown;
 }
 
 export interface InstanceConfig {

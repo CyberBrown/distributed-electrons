@@ -215,6 +215,8 @@ async function handleIntake(
       queued_at: null,
       started_at: null,
       completed_at: null,
+      workflow_instance_id: null,
+      workflow_name: null,
     };
 
     // Insert into D1

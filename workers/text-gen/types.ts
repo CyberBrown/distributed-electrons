@@ -60,6 +60,9 @@ export interface Env {
   // Spark Local Configuration (on-prem LLM)
   SPARK_LOCAL_URL?: string; // URL to Spark local LLM API
   SPARK_API_KEY?: string; // API key for Spark local (if required)
+
+  // Index signature for compatibility with shared config-cache
+  [key: string]: unknown;
 }
 
 export interface InstanceConfig {

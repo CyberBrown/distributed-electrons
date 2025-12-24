@@ -3,6 +3,13 @@ import { MockD1Database } from '../mocks/d1-mock';
 import worker from '../../../infrastructure/config-service/index';
 import { Env } from '../../../infrastructure/config-service/types';
 
+// Mock ExecutionContext for worker.fetch calls
+const mockCtx = {
+  waitUntil: () => {},
+  passThroughOnException: () => {},
+  props: {},
+} as ExecutionContext;
+
 describe('Config Service API Integration Tests', () => {
   let mockDB: MockD1Database;
   let env: Env;
@@ -15,7 +22,7 @@ describe('Config Service API Integration Tests', () => {
   describe('Health Check', () => {
     it('should return healthy status', async () => {
       const request = new Request('http://localhost/health');
-      const response = await worker.fetch(request, env);
+      const response = await worker.fetch(request, env, mockCtx);
       const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
@@ -25,7 +32,7 @@ describe('Config Service API Integration Tests', () => {
 
     it('should handle root path', async () => {
       const request = new Request('http://localhost/');
-      const response = await worker.fetch(request, env);
+      const response = await worker.fetch(request, env, mockCtx);
       const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(200);
@@ -38,7 +45,7 @@ describe('Config Service API Integration Tests', () => {
       const request = new Request('http://localhost/instance', {
         method: 'OPTIONS',
       });
-      const response = await worker.fetch(request, env);
+      const response = await worker.fetch(request, env, mockCtx);
 
       expect(response.status).toBe(200);
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
@@ -48,7 +55,7 @@ describe('Config Service API Integration Tests', () => {
 
     it('should include CORS headers in response', async () => {
       const request = new Request('http://localhost/health');
-      const response = await worker.fetch(request, env);
+      const response = await worker.fetch(request, env, mockCtx);
 
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
     });
@@ -67,7 +74,7 @@ describe('Config Service API Integration Tests', () => {
         }),
       });
 
-      const createResponse = await worker.fetch(createRequest, env);
+      const createResponse = await worker.fetch(createRequest, env, mockCtx);
       const createData = await createResponse.json() as Record<string, any>;
 
       expect(createResponse.status).toBe(200);
@@ -77,7 +84,7 @@ describe('Config Service API Integration Tests', () => {
 
       // 2. Get instance
       const getRequest = new Request(`http://localhost/instance/${instanceId}`);
-      const getResponse = await worker.fetch(getRequest, env);
+      const getResponse = await worker.fetch(getRequest, env, mockCtx);
       const getData = await getResponse.json() as Record<string, any>;
 
       expect(getResponse.status).toBe(200);
@@ -93,7 +100,7 @@ describe('Config Service API Integration Tests', () => {
         }),
       });
 
-      const updateResponse = await worker.fetch(updateRequest, env);
+      const updateResponse = await worker.fetch(updateRequest, env, mockCtx);
       expect(updateResponse.status).toBe(200);
 
       // 4. Delete instance
@@ -101,7 +108,7 @@ describe('Config Service API Integration Tests', () => {
         method: 'DELETE',
       });
 
-      const deleteResponse = await worker.fetch(deleteRequest, env);
+      const deleteResponse = await worker.fetch(deleteRequest, env, mockCtx);
       const deleteData = await deleteResponse.json() as Record<string, any>;
 
       expect(deleteResponse.status).toBe(200);
@@ -109,7 +116,7 @@ describe('Config Service API Integration Tests', () => {
 
       // 5. Verify deletion
       const verifyRequest = new Request(`http://localhost/instance/${instanceId}`);
-      const verifyResponse = await worker.fetch(verifyRequest, env);
+      const verifyResponse = await worker.fetch(verifyRequest, env, mockCtx);
 
       expect(verifyResponse.status).toBe(404);
     });
@@ -122,7 +129,8 @@ describe('Config Service API Integration Tests', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ org_id: 'org-1', name: 'instance-1' }),
         }),
-        env
+        env,
+        mockCtx
       );
 
       await worker.fetch(
@@ -131,12 +139,13 @@ describe('Config Service API Integration Tests', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ org_id: 'org-2', name: 'instance-2' }),
         }),
-        env
+        env,
+        mockCtx
       );
 
       // List all
       const listAllRequest = new Request('http://localhost/instance');
-      const listAllResponse = await worker.fetch(listAllRequest, env);
+      const listAllResponse = await worker.fetch(listAllRequest, env, mockCtx);
       const listAllData = await listAllResponse.json() as Record<string, any>;
 
       expect(listAllResponse.status).toBe(200);
@@ -144,7 +153,7 @@ describe('Config Service API Integration Tests', () => {
 
       // List filtered
       const listFilteredRequest = new Request('http://localhost/instance?org_id=org-1');
-      const listFilteredResponse = await worker.fetch(listFilteredRequest, env);
+      const listFilteredResponse = await worker.fetch(listFilteredRequest, env, mockCtx);
       const listFilteredData = await listFilteredResponse.json() as Record<string, any>;
 
       expect(listFilteredResponse.status).toBe(200);
@@ -167,7 +176,7 @@ describe('Config Service API Integration Tests', () => {
         }),
       });
 
-      const createResponse = await worker.fetch(createRequest, env);
+      const createResponse = await worker.fetch(createRequest, env, mockCtx);
       const createData = await createResponse.json() as Record<string, any>;
 
       expect(createResponse.status).toBe(200);
@@ -177,7 +186,7 @@ describe('Config Service API Integration Tests', () => {
 
       // 2. Get user
       const getRequest = new Request(`http://localhost/user/${userId}`);
-      const getResponse = await worker.fetch(getRequest, env);
+      const getResponse = await worker.fetch(getRequest, env, mockCtx);
       const getData = await getResponse.json() as Record<string, any>;
 
       expect(getResponse.status).toBe(200);
@@ -186,7 +195,7 @@ describe('Config Service API Integration Tests', () => {
 
       // 3. Get user by email
       const getByEmailRequest = new Request('http://localhost/user/email/test@example.com');
-      const getByEmailResponse = await worker.fetch(getByEmailRequest, env);
+      const getByEmailResponse = await worker.fetch(getByEmailRequest, env, mockCtx);
       const getByEmailData = await getByEmailResponse.json() as Record<string, any>;
 
       expect(getByEmailResponse.status).toBe(200);
@@ -201,7 +210,7 @@ describe('Config Service API Integration Tests', () => {
         }),
       });
 
-      const updateResponse = await worker.fetch(updateRequest, env);
+      const updateResponse = await worker.fetch(updateRequest, env, mockCtx);
       expect(updateResponse.status).toBe(200);
 
       // 5. Delete user
@@ -209,7 +218,7 @@ describe('Config Service API Integration Tests', () => {
         method: 'DELETE',
       });
 
-      const deleteResponse = await worker.fetch(deleteRequest, env);
+      const deleteResponse = await worker.fetch(deleteRequest, env, mockCtx);
       const deleteData = await deleteResponse.json() as Record<string, any>;
 
       expect(deleteResponse.status).toBe(200);
@@ -228,7 +237,8 @@ describe('Config Service API Integration Tests', () => {
             name: 'User 1',
           }),
         }),
-        env
+        env,
+        mockCtx
       );
 
       // Try to create second user with same email
@@ -242,7 +252,7 @@ describe('Config Service API Integration Tests', () => {
         }),
       });
 
-      const duplicateResponse = await worker.fetch(duplicateRequest, env);
+      const duplicateResponse = await worker.fetch(duplicateRequest, env, mockCtx);
       const duplicateData = await duplicateResponse.json() as Record<string, any>;
 
       expect(duplicateResponse.status).toBe(409);
@@ -264,7 +274,7 @@ describe('Config Service API Integration Tests', () => {
         }),
       });
 
-      const createInstanceResponse = await worker.fetch(createInstanceRequest, env);
+      const createInstanceResponse = await worker.fetch(createInstanceRequest, env, mockCtx);
       const createInstanceData = await createInstanceResponse.json() as Record<string, any>;
       instanceId = createInstanceData.data.instance_id;
     });
@@ -282,7 +292,7 @@ describe('Config Service API Integration Tests', () => {
         }),
       });
 
-      const createResponse = await worker.fetch(createRequest, env);
+      const createResponse = await worker.fetch(createRequest, env, mockCtx);
       const createData = await createResponse.json() as Record<string, any>;
 
       expect(createResponse.status).toBe(200);
@@ -292,7 +302,7 @@ describe('Config Service API Integration Tests', () => {
 
       // 2. Get project
       const getRequest = new Request(`http://localhost/project/${projectId}`);
-      const getResponse = await worker.fetch(getRequest, env);
+      const getResponse = await worker.fetch(getRequest, env, mockCtx);
       const getData = await getResponse.json() as Record<string, any>;
 
       expect(getResponse.status).toBe(200);
@@ -310,7 +320,7 @@ describe('Config Service API Integration Tests', () => {
         }),
       });
 
-      const updateResponse = await worker.fetch(updateRequest, env);
+      const updateResponse = await worker.fetch(updateRequest, env, mockCtx);
       expect(updateResponse.status).toBe(200);
 
       // 4. Delete project
@@ -318,7 +328,7 @@ describe('Config Service API Integration Tests', () => {
         method: 'DELETE',
       });
 
-      const deleteResponse = await worker.fetch(deleteRequest, env);
+      const deleteResponse = await worker.fetch(deleteRequest, env, mockCtx);
       const deleteData = await deleteResponse.json() as Record<string, any>;
 
       expect(deleteResponse.status).toBe(200);
@@ -336,7 +346,8 @@ describe('Config Service API Integration Tests', () => {
             name: 'Project 1',
           }),
         }),
-        env
+        env,
+        mockCtx
       );
 
       await worker.fetch(
@@ -348,12 +359,13 @@ describe('Config Service API Integration Tests', () => {
             name: 'Project 2',
           }),
         }),
-        env
+        env,
+        mockCtx
       );
 
       // List filtered by instance
       const listRequest = new Request(`http://localhost/project?instance_id=${instanceId}`);
-      const listResponse = await worker.fetch(listRequest, env);
+      const listResponse = await worker.fetch(listRequest, env, mockCtx);
       const listData = await listResponse.json() as Record<string, any>;
 
       expect(listResponse.status).toBe(200);
@@ -371,7 +383,7 @@ describe('Config Service API Integration Tests', () => {
         }),
       });
 
-      const createResponse = await worker.fetch(createRequest, env);
+      const createResponse = await worker.fetch(createRequest, env, mockCtx);
       const createData = await createResponse.json() as Record<string, any>;
 
       expect(createResponse.status).toBe(404);
@@ -382,7 +394,7 @@ describe('Config Service API Integration Tests', () => {
   describe('Error Handling', () => {
     it('should return 404 for unknown routes', async () => {
       const request = new Request('http://localhost/unknown-route');
-      const response = await worker.fetch(request, env);
+      const response = await worker.fetch(request, env, mockCtx);
       const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
@@ -394,7 +406,7 @@ describe('Config Service API Integration Tests', () => {
       const request = new Request('http://localhost/instance/123', {
         method: 'PATCH',
       });
-      const response = await worker.fetch(request, env);
+      const response = await worker.fetch(request, env, mockCtx);
       const data = await response.json() as Record<string, any>;
 
       expect(response.status).toBe(404);
@@ -403,7 +415,7 @@ describe('Config Service API Integration Tests', () => {
 
     it('should include request_id in all error responses', async () => {
       const request = new Request('http://localhost/instance/non-existent');
-      const response = await worker.fetch(request, env);
+      const response = await worker.fetch(request, env, mockCtx);
       const data = await response.json() as Record<string, any>;
 
       expect(data.request_id).toBeDefined();
