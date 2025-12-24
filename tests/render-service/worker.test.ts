@@ -44,7 +44,7 @@ describe('Render Service Worker', () => {
       const response = await worker.fetch(request, mockEnv);
 
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
-      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, PUT, DELETE, OPTIONS');
     });
   });
 
@@ -56,9 +56,10 @@ describe('Render Service Worker', () => {
 
       const response = await worker.fetch(request, mockEnv);
 
-      expect(response.status).toBe(200);
+      // handleCorsPrelight returns 204 No Content
+      expect(response.status).toBe(204);
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
-      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, PUT, DELETE, OPTIONS');
       expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Content-Type');
       expect(response.headers.get('Access-Control-Max-Age')).toBe('86400');
     });
@@ -332,9 +333,11 @@ describe('Render Service Worker', () => {
 
   describe('POST /render - Error Handling', () => {
     it('should handle Shotstack rate limit error', async () => {
+      // Mock a proper Response object with headers for fetchWithRetry to handle correctly
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 429,
+        headers: new Headers(), // No Retry-After header, so fetchWithRetry returns after max retries
         text: async () => 'Rate limit exceeded',
       });
 
@@ -616,7 +619,7 @@ describe('Render Service Worker', () => {
       const response = await worker.fetch(request, mockEnv);
 
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
-      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, PUT, DELETE, OPTIONS');
     });
   });
 

@@ -22,6 +22,7 @@ import {
 import {
   addCorsHeaders,
   createErrorResponse,
+  handleCorsPrelight,
 } from '../shared/http';
 import { createRouter, LLMRouter } from './llm-router';
 import { generateWithSparkLocal } from './spark-provider';
@@ -110,14 +111,7 @@ export default {
 
       // Handle CORS preflight
       if (request.method === 'OPTIONS') {
-        return new Response(null, {
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization',
-            'Access-Control-Max-Age': '86400',
-          },
-        });
+        return handleCorsPrelight();
       }
 
       // Route handling

@@ -211,8 +211,8 @@ describe('Text Generation Worker', () => {
       const response = await worker.fetch(request, mockEnv);
 
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
-      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
-      expect(response.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type, X-API-Key, Authorization');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, PUT, DELETE, OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type, X-API-Key, X-Instance-ID, X-Request-ID, Authorization');
     });
 
     it('should include CORS headers in error response', async () => {
@@ -223,7 +223,7 @@ describe('Text Generation Worker', () => {
       const response = await worker.fetch(request, mockEnv);
 
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
-      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, PUT, DELETE, OPTIONS');
     });
 
     it('should handle OPTIONS preflight request', async () => {
@@ -233,10 +233,11 @@ describe('Text Generation Worker', () => {
 
       const response = await worker.fetch(request, mockEnv);
 
-      expect(response.status).toBe(200);
+      // handleCorsPrelight returns 204 No Content
+      expect(response.status).toBe(204);
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
-      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
-      expect(response.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type, X-API-Key, Authorization');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, PUT, DELETE, OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type, X-API-Key, X-Instance-ID, X-Request-ID, Authorization');
       expect(response.headers.get('Access-Control-Max-Age')).toBe('86400');
     });
   });
@@ -425,7 +426,8 @@ describe('Text Generation Worker', () => {
 
       const response = await worker.fetch(request, mockEnv);
 
-      expect(response.status).toBe(200);
+      // handleCorsPrelight returns 204 No Content
+      expect(response.status).toBe(204);
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
     });
 

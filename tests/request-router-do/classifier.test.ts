@@ -68,13 +68,15 @@ describe('Task Classifier', () => {
         const result = classifyQuery('Give me a quick answer about the weather');
         expect(result.task_type).toBe('text');
         expect(result.subtask).toBe('fast');
-        expect(result.model).toBe('claude-3-5-haiku');
+        // Fast subtask now routes to sandbox-executor (Claude Code with OAuth)
+        expect(result.model).toBe('claude-code');
       });
 
-      it('should use anthropic as default text provider', () => {
+      it('should use sandbox-executor as default text provider', () => {
         const result = classifyQuery('Help me write an email');
         expect(result.task_type).toBe('text');
-        expect(result.provider).toBe('anthropic');
+        // Text tasks now route to sandbox-executor to use Claude.ai Max subscription
+        expect(result.provider).toBe('sandbox-executor');
       });
     });
 
@@ -166,8 +168,9 @@ describe('Task Classifier', () => {
     it('should use default routing for type without subtask match', () => {
       const result = classifyWithType('Generate something', 'text');
       expect(result.task_type).toBe('text');
-      expect(result.provider).toBe('anthropic');
-      expect(result.model).toBe('claude-3-5-sonnet');
+      // Text tasks now route to sandbox-executor (Claude Code with OAuth)
+      expect(result.provider).toBe('sandbox-executor');
+      expect(result.model).toBe('claude-code');
     });
   });
 

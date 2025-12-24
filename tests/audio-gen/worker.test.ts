@@ -311,7 +311,8 @@ describe('Audio Generation Worker', () => {
 
       const response = await worker.fetch(request, mockEnv);
 
-      expect(response.status).toBe(200);
+      // handleCorsPrelight returns 204 No Content
+      expect(response.status).toBe(204);
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
       expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
       expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Content-Type');
