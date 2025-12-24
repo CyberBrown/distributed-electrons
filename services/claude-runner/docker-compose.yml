@@ -8,8 +8,8 @@ services:
     restart: unless-stopped
     init: true  # Prevents zombie processes
     volumes:
-      # Persistent OAuth credentials - mount from host
-      - ${CLAUDE_CONFIG_PATH:-~/.claude}:/root/.claude:rw
+      # Persistent OAuth credentials - mount to node user's home (container runs as node)
+      - ${CLAUDE_CONFIG_PATH:-~/.claude}:/home/node/.claude:rw
       # Cached git repos for faster execution
       - ./repos:/repos:rw
       # Logs
