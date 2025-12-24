@@ -37,6 +37,9 @@ database_id = "7cff30a0-c974-4ede-b96a-c91dd2f0c870"
 DELIVERY_URL = "https://delivery.distributedelectrons.com"
 SHOTSTACK_ENV = "stage"
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
+# Sandbox executor for code execution (handles runner routing + fallback)
+SANDBOX_EXECUTOR_URL = "https://sandbox-executor.solamp.workers.dev"
+# Direct runner URLs (kept for backwards compatibility, sandbox-executor is preferred)
 CLAUDE_RUNNER_URL = "https://claude-runner.shiftaltcreate.com"
 GEMINI_RUNNER_URL = "https://gemini-runner.shiftaltcreate.com"
 NEXUS_API_URL = "https://nexus-mcp.solamp.workers.dev"

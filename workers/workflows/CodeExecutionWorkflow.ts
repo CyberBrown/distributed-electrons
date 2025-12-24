@@ -1,21 +1,21 @@
 /**
  * CodeExecutionWorkflow
  *
- * Cloudflare Workflow for durable code execution via on-prem runners.
+ * Cloudflare Workflow for durable code execution via sandbox-executor.
  * Handles code tasks from Nexus with:
- * - Automatic fallover from claude-runner to gemini-runner
+ * - Validation step to catch bad tasks early
+ * - Execution via sandbox-executor (which routes to runners and handles fallback)
+ * - Error classification to decide retry vs quarantine
  * - Retries with exponential backoff
  * - Crash recovery (resume from last checkpoint)
- * - Result reporting (success or quarantine)
  * - Nexus callback with retry tracking and quarantine
  *
  * Steps:
- * 1. log-request: Log request receipt for visibility
- * 2. execute-primary: Attempt primary executor (claude-runner by default)
- * 3. execute-fallback: On failure, try gemini-runner
- * 4. report-result: Report completion status (success/quarantine) to D1/config-service
- * 5. report-to-nexus: Report result to Nexus MCP server (with retry/quarantine tracking)
- * 6. send-callback: Optional client callback notification
+ * 1. validate-task: Validate task parameters and classify early errors
+ * 2. execute-task: Execute via sandbox-executor (handles runner routing + fallback)
+ * 3. classify-error: On failure, decide whether to retry, fallback, or quarantine
+ * 4. report-to-nexus: Report result to Nexus MCP server
+ * 5. send-callback: Optional client callback notification
  */
 
 import { WorkflowEntrypoint, WorkflowStep, type WorkflowEvent } from 'cloudflare:workers';
@@ -23,9 +23,26 @@ import type { CodeExecutionParams, ExecutionResult, RunnerResponse } from './typ
 import type { NexusEnv } from './lib/nexus-callback';
 import { reportToNexus } from './lib/nexus-callback';
 
-// Default runner URLs (via Cloudflare Tunnel)
+// Default sandbox-executor URL
+const DEFAULT_SANDBOX_EXECUTOR_URL = 'https://sandbox-executor.solamp.workers.dev';
+
+// Default runner URLs (for fallback if sandbox-executor not configured)
 const DEFAULT_CLAUDE_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
 const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini-runner.shiftaltcreate.com';
+
+// Error classification types
+type ErrorAction = 'retry' | 'try-fallback' | 'quarantine';
+
+interface ValidationResult {
+  valid: boolean;
+  error?: string;
+  action?: ErrorAction;
+}
+
+interface ClassificationResult {
+  action: ErrorAction;
+  reason: string;
+}
 
 export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExecutionParams> {
   /**
@@ -45,119 +62,148 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
     console.log(`[CodeExecutionWorkflow] Starting for task ${task_id}`);
     console.log(`[CodeExecutionWorkflow] Preferred executor: ${preferred_executor}`);
 
-    // Step 1: Log request receipt for visibility/tracking
-    const requestLog = await step.do(
-      'log-request',
+    // Step 1: Validate task parameters
+    const validation = await step.do(
+      'validate-task',
       {
-        retries: { limit: 2, delay: '1 second', backoff: 'exponential' },
+        retries: { limit: 1, delay: '1 second', backoff: 'constant' },
         timeout: '10 seconds',
       },
       async () => {
-        return this.logRequestReceipt(task_id, prompt, repo_url, preferred_executor);
+        return this.validateTask(task_id, prompt, repo_url);
       }
     );
 
-    console.log(`[CodeExecutionWorkflow] Request logged: ${requestLog.logged_at}`);
+    // If validation failed, report error and exit early
+    if (!validation.valid) {
+      console.error(`[CodeExecutionWorkflow] Validation failed: ${validation.error}`);
 
-    // Determine primary and fallback executors based on preference
-    const primaryExecutor = preferred_executor === 'gemini' ? 'gemini' : 'claude';
-    const fallbackExecutor = primaryExecutor === 'claude' ? 'gemini' : 'claude';
+      // Report validation error to Nexus
+      await step.do(
+        'report-validation-error',
+        {
+          retries: { limit: 3, delay: '2 seconds', backoff: 'exponential' },
+          timeout: '30 seconds',
+        },
+        async () => {
+          await reportToNexus(this.env, {
+            task_id,
+            success: false,
+            error: validation.error || 'Validation failed',
+            executor_used: 'none',
+            duration_ms: 0,
+          });
+          return { reported: true };
+        }
+      );
 
-    // Step 2: Attempt primary executor
-    let primaryResult: ExecutionResult | null = null;
-    let primaryError: string | null = null;
+      return {
+        success: false,
+        task_id,
+        executor: 'none' as const,
+        error: validation.error,
+        quarantine: validation.action === 'quarantine',
+        duration_ms: 0,
+      };
+    }
+
+    console.log(`[CodeExecutionWorkflow] Task validated successfully`);
+
+    // Step 2: Execute via sandbox-executor (handles runner routing + fallback)
+    let result: ExecutionResult;
 
     try {
-      primaryResult = await step.do(
-        'execute-primary',
+      result = await step.do(
+        'execute-task',
         {
           retries: {
             limit: 2,
-            delay: '5 seconds',
+            delay: '10 seconds',
             backoff: 'exponential',
           },
           timeout: `${Math.ceil(timeout_ms / 1000)} seconds`,
         },
         async () => {
-          return await this.executeOnRunner(
-            primaryExecutor,
+          return await this.executeViaSandbox(
             task_id,
             prompt,
             repo_url,
-            context,
+            preferred_executor,
             timeout_ms
           );
         }
       );
     } catch (error) {
-      primaryError = error instanceof Error ? error.message : String(error);
-      console.warn(`[CodeExecutionWorkflow] Primary executor (${primaryExecutor}) failed: ${primaryError}`);
-    }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[CodeExecutionWorkflow] Execution failed: ${errorMessage}`);
 
-    // If primary succeeded, skip fallback
-    if (primaryResult?.success) {
-      console.log(`[CodeExecutionWorkflow] Primary executor succeeded for task ${task_id}`);
-    } else {
-      // Step 3: Attempt fallback executor
-      console.log(`[CodeExecutionWorkflow] Attempting fallback executor: ${fallbackExecutor}`);
+      // Step 3: Classify the error to decide action
+      const classification = await step.do(
+        'classify-error',
+        {
+          retries: { limit: 1, delay: '1 second', backoff: 'constant' },
+          timeout: '5 seconds',
+        },
+        async () => {
+          return this.classifyError(errorMessage);
+        }
+      );
 
-      try {
-        primaryResult = await step.do(
-          'execute-fallback',
-          {
-            retries: {
-              limit: 2,
-              delay: '5 seconds',
-              backoff: 'exponential',
+      console.log(`[CodeExecutionWorkflow] Error classified: ${classification.action} - ${classification.reason}`);
+
+      // If we should try fallback executor
+      if (classification.action === 'try-fallback') {
+        const fallbackExecutor = preferred_executor === 'claude' ? 'gemini' : 'claude';
+        console.log(`[CodeExecutionWorkflow] Trying fallback executor: ${fallbackExecutor}`);
+
+        try {
+          result = await step.do(
+            'execute-fallback',
+            {
+              retries: {
+                limit: 2,
+                delay: '10 seconds',
+                backoff: 'exponential',
+              },
+              timeout: `${Math.ceil(timeout_ms / 1000)} seconds`,
             },
-            timeout: `${Math.ceil(timeout_ms / 1000)} seconds`,
-          },
-          async () => {
-            return await this.executeOnRunner(
-              fallbackExecutor,
-              task_id,
-              prompt,
-              repo_url,
-              context,
-              timeout_ms
-            );
-          }
-        );
-      } catch (error) {
-        const fallbackError = error instanceof Error ? error.message : String(error);
-        console.error(`[CodeExecutionWorkflow] Fallback executor (${fallbackExecutor}) also failed: ${fallbackError}`);
+            async () => {
+              return await this.executeViaSandbox(
+                task_id,
+                prompt,
+                repo_url,
+                fallbackExecutor,
+                timeout_ms
+              );
+            }
+          );
+        } catch (fallbackError) {
+          const fallbackErrorMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          console.error(`[CodeExecutionWorkflow] Fallback also failed: ${fallbackErrorMessage}`);
 
-        // Both executors failed - mark for quarantine
-        primaryResult = {
+          result = {
+            success: false,
+            task_id,
+            executor: fallbackExecutor,
+            error: `Both executors failed. Primary: ${errorMessage}. Fallback: ${fallbackErrorMessage}`,
+            quarantine: true,
+            duration_ms: 0,
+          };
+        }
+      } else {
+        // Quarantine or retry failed - create failed result
+        result = {
           success: false,
           task_id,
-          executor: fallbackExecutor,
-          error: `Both executors failed. Primary (${primaryExecutor}): ${primaryError}. Fallback (${fallbackExecutor}): ${fallbackError}`,
-          quarantine: true,
+          executor: preferred_executor,
+          error: errorMessage,
+          quarantine: classification.action === 'quarantine',
           duration_ms: 0,
         };
       }
     }
 
-    // Step 4: Report result back
-    const reportResult = await step.do(
-      'report-result',
-      {
-        retries: {
-          limit: 3,
-          delay: '2 seconds',
-          backoff: 'exponential',
-        },
-        timeout: '30 seconds',
-      },
-      async () => {
-        return await this.reportResult(task_id, primaryResult!);
-      }
-    );
-
-    console.log(`[CodeExecutionWorkflow] Result reported: ${reportResult.status}`);
-
-    // Step 5: Report to Nexus
+    // Step 4: Report to Nexus
     const nexusReportResult = await step.do(
       'report-to-nexus',
       {
@@ -171,12 +217,12 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
       async () => {
         const reported = await reportToNexus(this.env, {
           task_id: task_id,
-          success: primaryResult!.success,
-          output: primaryResult!.output,
-          error: primaryResult!.error,
-          exit_code: primaryResult!.exit_code,
-          executor_used: primaryResult!.executor,
-          duration_ms: primaryResult!.duration_ms,
+          success: result.success,
+          output: result.output,
+          error: result.error,
+          exit_code: result.exit_code,
+          executor_used: result.executor,
+          duration_ms: result.duration_ms,
         });
         return { reported, timestamp: new Date().toISOString() };
       }
@@ -184,7 +230,7 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
 
     console.log(`[CodeExecutionWorkflow] Nexus report: ${nexusReportResult.reported ? 'success' : 'failed'}`);
 
-    // Step 6: Send callback if configured (best effort)
+    // Step 5: Send callback if configured (best effort)
     if (callback_url) {
       await step.do(
         'send-callback',
@@ -198,7 +244,7 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
         },
         async () => {
           try {
-            await this.sendCallback(callback_url, task_id, primaryResult!);
+            await this.sendCallback(callback_url, task_id, result);
           } catch (error) {
             // Log but don't throw - callback is best effort
             console.warn(`[CodeExecutionWorkflow] Callback failed: ${error}`);
@@ -210,201 +256,180 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
     console.log(`[CodeExecutionWorkflow] Completed for task ${task_id}`);
 
     return {
-      success: primaryResult!.success,
+      success: result.success,
       task_id,
-      executor: primaryResult!.executor,
-      output: primaryResult!.output,
-      error: primaryResult!.error,
-      quarantine: primaryResult!.quarantine || false,
-      duration_ms: primaryResult!.duration_ms,
+      executor: result.executor,
+      output: result.output,
+      error: result.error,
+      quarantine: result.quarantine || false,
+      duration_ms: result.duration_ms,
     };
   }
 
   /**
-   * Log request receipt for visibility/tracking
+   * Validate task parameters before execution
+   * Catches obvious issues early to avoid wasting execution time
    */
-  private async logRequestReceipt(
+  private validateTask(
     taskId: string,
     prompt: string,
-    repoUrl?: string,
-    executor?: string
-  ): Promise<{ logged_at: string; task_id: string }> {
-    const now = new Date().toISOString();
+    repoUrl?: string
+  ): ValidationResult {
+    // Check required fields
+    if (!taskId) {
+      return { valid: false, error: 'Missing task_id', action: 'quarantine' };
+    }
 
-    // Update task status in D1 if available
-    if (this.env.DB) {
+    if (!prompt || prompt.trim().length === 0) {
+      return { valid: false, error: 'Missing or empty prompt', action: 'quarantine' };
+    }
+
+    // Check prompt length (avoid processing extremely short or long prompts)
+    if (prompt.trim().length < 10) {
+      return { valid: false, error: 'Prompt too short (minimum 10 characters)', action: 'quarantine' };
+    }
+
+    if (prompt.length > 100000) {
+      return { valid: false, error: 'Prompt too long (maximum 100K characters)', action: 'quarantine' };
+    }
+
+    // Validate repo URL format if provided
+    if (repoUrl) {
       try {
-        await this.env.DB.prepare(`
-          UPDATE tasks SET
-            status = 'processing',
-            started_at = ?,
-            executor = ?
-          WHERE id = ?
-        `).bind(now, executor, taskId).run();
-      } catch (error) {
-        // Log but don't fail - D1 update is best effort
-        console.warn(`[CodeExecutionWorkflow] Failed to update task status in D1: ${error}`);
+        const url = new URL(repoUrl);
+        if (!['https:', 'http:', 'git:'].includes(url.protocol)) {
+          return { valid: false, error: 'Invalid repo URL protocol (must be https, http, or git)', action: 'quarantine' };
+        }
+      } catch {
+        return { valid: false, error: 'Invalid repo URL format', action: 'quarantine' };
       }
     }
 
-    console.log(`[CodeExecutionWorkflow] Task ${taskId} logged at ${now}`);
-    console.log(`[CodeExecutionWorkflow] Prompt length: ${prompt.length} chars`);
-    if (repoUrl) {
-      console.log(`[CodeExecutionWorkflow] Repo URL: ${repoUrl}`);
-    }
-
-    return { logged_at: now, task_id: taskId };
+    console.log(`[CodeExecutionWorkflow] Task ${taskId} validated: prompt length=${prompt.length}`);
+    return { valid: true };
   }
 
   /**
-   * Execute task on specified runner
+   * Execute task via sandbox-executor
+   * Sandbox-executor handles runner routing and fallback internally
    */
-  private async executeOnRunner(
-    executorType: 'claude' | 'gemini',
+  private async executeViaSandbox(
     taskId: string,
     prompt: string,
     repoUrl?: string,
-    context?: Record<string, unknown>,
+    executorType: 'claude' | 'gemini' = 'claude',
     timeoutMs: number = 300000
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
+    const sandboxUrl = this.env.SANDBOX_EXECUTOR_URL || DEFAULT_SANDBOX_EXECUTOR_URL;
 
-    // Get runner URL and secret based on executor type
-    const runnerUrl = executorType === 'claude'
-      ? (this.env.CLAUDE_RUNNER_URL || DEFAULT_CLAUDE_RUNNER_URL)
-      : (this.env.GEMINI_RUNNER_URL || DEFAULT_GEMINI_RUNNER_URL);
-
-    const runnerSecret = executorType === 'claude'
-      ? this.env.RUNNER_SECRET
-      : this.env.GEMINI_RUNNER_SECRET;
-
-    if (!runnerSecret) {
-      throw new Error(`${executorType.toUpperCase()}_RUNNER_SECRET not configured`);
-    }
-
-    console.log(`[CodeExecutionWorkflow] Executing on ${executorType} runner at ${runnerUrl}`);
+    console.log(`[CodeExecutionWorkflow] Executing via sandbox-executor at ${sandboxUrl}`);
+    console.log(`[CodeExecutionWorkflow] Executor type: ${executorType}, Timeout: ${timeoutMs}ms`);
 
     // Build headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'X-Runner-Secret': runnerSecret,
       'X-Request-ID': taskId,
     };
 
-    // Add Cloudflare Access service token headers if configured
-    if (this.env.CF_ACCESS_CLIENT_ID && this.env.CF_ACCESS_CLIENT_SECRET) {
-      headers['CF-Access-Client-Id'] = this.env.CF_ACCESS_CLIENT_ID;
-      headers['CF-Access-Client-Secret'] = this.env.CF_ACCESS_CLIENT_SECRET;
+    // Add sandbox executor secret if configured
+    if (this.env.SANDBOX_EXECUTOR_SECRET) {
+      headers['X-API-Key'] = this.env.SANDBOX_EXECUTOR_SECRET;
     }
 
     try {
-      const response = await fetch(`${runnerUrl}/execute`, {
+      const response = await fetch(`${sandboxUrl}/execute`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          prompt,
-          repo_url: repoUrl,
-          timeout_ms: timeoutMs,
-          context,
+          task: prompt,
+          repo: repoUrl,
+          executor_type: executorType,
+          options: {
+            timeout_ms: timeoutMs,
+          },
         }),
       });
 
-      const result = await response.json() as RunnerResponse;
+      const result = await response.json() as {
+        success: boolean;
+        logs?: string;
+        error?: string;
+        error_code?: string;
+        metadata?: {
+          execution_time_ms?: number;
+          exit_code?: number;
+          executor_type?: string;
+        };
+      };
       const duration = Date.now() - startTime;
 
       if (!result.success) {
-        // Check for OAuth/auth errors that shouldn't trigger fallback
-        if (result.error?.includes('OAuth') || result.error?.includes('authentication')) {
-          console.error(`[CodeExecutionWorkflow] ${executorType} runner auth error: ${result.error}`);
-        }
-        throw new Error(result.error || `${executorType} runner failed`);
+        const errorMessage = result.error || result.error_code || 'Execution failed';
+        console.error(`[CodeExecutionWorkflow] Sandbox execution failed: ${errorMessage}`);
+        throw new Error(errorMessage);
       }
 
       return {
         success: true,
         task_id: taskId,
-        executor: executorType,
-        output: result.output,
-        exit_code: result.exit_code,
-        duration_ms: duration,
+        executor: (result.metadata?.executor_type as 'claude' | 'gemini') || executorType,
+        output: result.logs,
+        exit_code: result.metadata?.exit_code,
+        duration_ms: result.metadata?.execution_time_ms || duration,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[CodeExecutionWorkflow] ${executorType} runner error: ${errorMessage}`);
-      throw new Error(`${executorType} runner failed: ${errorMessage}`);
+      console.error(`[CodeExecutionWorkflow] Sandbox execution error: ${errorMessage}`);
+      throw new Error(errorMessage);
     }
   }
 
   /**
-   * Report execution result back to config-service
+   * Classify an error to decide what action to take
+   * Returns: 'retry' (try again), 'try-fallback' (use other executor), or 'quarantine' (give up)
    */
-  private async reportResult(
-    taskId: string,
-    result: ExecutionResult
-  ): Promise<{ status: string; reported_at: string }> {
-    const now = new Date().toISOString();
+  private classifyError(error: string): ClassificationResult {
+    const e = error.toLowerCase();
 
-    // Update task status in D1
-    if (this.env.DB) {
-      try {
-        const status = result.quarantine ? 'quarantined' : (result.success ? 'completed' : 'failed');
-        await this.env.DB.prepare(`
-          UPDATE tasks SET
-            status = ?,
-            completed_at = ?,
-            output = ?,
-            error = ?,
-            exit_code = ?,
-            duration_ms = ?
-          WHERE id = ?
-        `).bind(
-          status,
-          now,
-          result.output || null,
-          result.error || null,
-          result.exit_code ?? null,
-          result.duration_ms,
-          taskId
-        ).run();
-      } catch (error) {
-        console.warn(`[CodeExecutionWorkflow] Failed to update task result in D1: ${error}`);
-      }
+    // Immediate quarantine - don't retry
+    if (e.includes('invalid') || e.includes('missing required')) {
+      return { action: 'quarantine', reason: 'Invalid input - will not retry' };
+    }
+    if (e.includes('unauthorized') || e.includes('authentication') || e.includes('oauth')) {
+      return { action: 'quarantine', reason: 'Auth error - requires human intervention' };
+    }
+    if (e.includes('failed to classify') || e.includes('cannot parse')) {
+      return { action: 'quarantine', reason: 'Task parsing failed - will not retry' };
     }
 
-    // Emit event to config-service if available
-    if (this.env.CONFIG_SERVICE_URL) {
-      try {
-        const eventType = result.quarantine
-          ? 'task.quarantined'
-          : (result.success ? 'task.completed' : 'task.failed');
-
-        await fetch(`${this.env.CONFIG_SERVICE_URL}/events`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tenant_id: 'system',
-            action: eventType,
-            eventable_type: 'task',
-            eventable_id: taskId,
-            particulars: {
-              task_id: taskId,
-              executor: result.executor,
-              success: result.success,
-              quarantine: result.quarantine,
-              duration_ms: result.duration_ms,
-              timestamp: now,
-            },
-          }),
-        });
-      } catch (error) {
-        console.warn(`[CodeExecutionWorkflow] Failed to emit event: ${error}`);
-      }
+    // Try fallback executor
+    if (e.includes('unreachable') || e.includes('runner_unreachable')) {
+      return { action: 'try-fallback', reason: 'Runner unreachable - trying fallback' };
+    }
+    if (e.includes('503') || e.includes('service unavailable')) {
+      return { action: 'try-fallback', reason: 'Service unavailable - trying fallback' };
+    }
+    if (e.includes('timeout') || e.includes('timed out')) {
+      return { action: 'try-fallback', reason: 'Execution timeout - trying fallback' };
+    }
+    if (e.includes('all_runners_failed')) {
+      return { action: 'quarantine', reason: 'All runners failed - needs investigation' };
     }
 
-    return {
-      status: result.quarantine ? 'quarantined' : (result.success ? 'completed' : 'failed'),
-      reported_at: now,
-    };
+    // Retry same executor (transient errors)
+    if (e.includes('rate limit') || e.includes('too many requests') || e.includes('429')) {
+      return { action: 'retry', reason: 'Rate limited - will retry' };
+    }
+    if (e.includes('overloaded') || e.includes('capacity')) {
+      return { action: 'retry', reason: 'Server overloaded - will retry' };
+    }
+    if (e.includes('500') || e.includes('internal server error')) {
+      return { action: 'try-fallback', reason: 'Server error - trying fallback' };
+    }
+
+    // Default: quarantine unknown errors
+    return { action: 'quarantine', reason: `Unknown error: ${error.substring(0, 100)}` };
   }
 
   /**

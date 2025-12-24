@@ -245,6 +245,12 @@ export interface NexusEnv extends CodeExecutionEnv {
 
   /** ntfy topic for quarantine notifications (optional) */
   NTFY_TOPIC?: string;
+
+  /** Sandbox executor URL for delegating code execution */
+  SANDBOX_EXECUTOR_URL?: string;
+
+  /** Sandbox executor API key (optional) */
+  SANDBOX_EXECUTOR_SECRET?: string;
 }
 
 /**
