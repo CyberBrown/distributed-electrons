@@ -8,9 +8,14 @@ import type {
   RenderRequest,
   RenderResponse,
   RenderStatusResponse,
-  ErrorResponse,
   Timeline,
 } from './types';
+import {
+  addCorsHeaders,
+  createErrorResponse,
+  handleCorsPrelight,
+  fetchWithRetry,
+} from '../shared/http';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -21,14 +26,7 @@ export default {
 
       // Handle CORS preflight
       if (request.method === 'OPTIONS') {
-        return new Response(null, {
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization',
-            'Access-Control-Max-Age': '86400',
-          },
-        });
+        return handleCorsPrelight();
       }
 
       // Route handling
@@ -69,13 +67,7 @@ export default {
   },
 };
 
-function addCorsHeaders(response: Response): Response {
-  const newResponse = new Response(response.body, response);
-  newResponse.headers.set('Access-Control-Allow-Origin', '*');
-  newResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  newResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, Authorization');
-  return newResponse;
-}
+// addCorsHeaders imported from shared/http
 
 async function handleRender(
   request: Request,
@@ -249,22 +241,26 @@ async function submitShotstackRender(
     ? 'https://api.shotstack.io/stage'
     : 'https://api.shotstack.io/v1';
 
-  const response = await fetch(`${baseUrl}/render`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-    },
-    body: JSON.stringify({
-      timeline,
-      output: {
-        format: output.format || 'mp4',
-        resolution: output.resolution || 'hd',
-        fps: output.fps || 25,
-        quality: output.quality || 'high',
+  const response = await fetchWithRetry(
+    `${baseUrl}/render`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
       },
-    }),
-  });
+      body: JSON.stringify({
+        timeline,
+        output: {
+          format: output.format || 'mp4',
+          resolution: output.resolution || 'hd',
+          fps: output.fps || 25,
+          quality: output.quality || 'high',
+        },
+      }),
+    },
+    { maxRetries: 2, initialDelayMs: 1000 }
+  );
 
   if (!response.ok) {
     const error = await response.text();
@@ -284,9 +280,11 @@ async function getShotstackStatus(
     ? 'https://api.shotstack.io/stage'
     : 'https://api.shotstack.io/v1';
 
-  const response = await fetch(`${baseUrl}/render/${renderId}`, {
-    headers: { 'x-api-key': apiKey },
-  });
+  const response = await fetchWithRetry(
+    `${baseUrl}/render/${renderId}`,
+    { headers: { 'x-api-key': apiKey } },
+    { maxRetries: 2, initialDelayMs: 1000 }
+  );
 
   if (!response.ok) {
     const error = await response.text();
@@ -316,22 +314,4 @@ function mapShotstackStatus(status: string): RenderStatusResponse['status'] {
   return statusMap[status] || 'queued';
 }
 
-function createErrorResponse(
-  message: string,
-  code: string,
-  requestId: string,
-  status: number,
-  details?: Record<string, any>
-): Response {
-  const errorResponse: ErrorResponse = {
-    error: message,
-    error_code: code,
-    request_id: requestId,
-    details,
-  };
-
-  return Response.json(errorResponse, {
-    status,
-    headers: { 'X-Request-ID': requestId },
-  });
-}
+// createErrorResponse imported from shared/http

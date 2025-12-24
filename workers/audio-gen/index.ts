@@ -7,9 +7,14 @@ import type {
   Env,
   SynthesizeRequest,
   SynthesizeResponse,
-  ErrorResponse,
   AudioResult,
 } from './types';
+import {
+  addCorsHeaders,
+  createErrorResponse,
+  handleCorsPrelight,
+  fetchWithRetry,
+} from '../shared/http';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -20,14 +25,7 @@ export default {
 
       // Handle CORS preflight
       if (request.method === 'OPTIONS') {
-        return new Response(null, {
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization',
-            'Access-Control-Max-Age': '86400',
-          },
-        });
+        return handleCorsPrelight();
       }
 
       // Route handling
@@ -89,13 +87,7 @@ export default {
   },
 };
 
-function addCorsHeaders(response: Response): Response {
-  const newResponse = new Response(response.body, response);
-  newResponse.headers.set('Access-Control-Allow-Origin', '*');
-  newResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  newResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, Authorization');
-  return newResponse;
-}
+// addCorsHeaders imported from shared/http
 
 async function handleSynthesize(
   request: Request,
@@ -225,7 +217,7 @@ async function generateWithElevenLabs(
   options: any,
   apiKey: string
 ): Promise<AudioResult> {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
     {
       method: 'POST',
@@ -243,7 +235,8 @@ async function generateWithElevenLabs(
           use_speaker_boost: options.use_speaker_boost ?? true,
         },
       }),
-    }
+    },
+    { maxRetries: 2, initialDelayMs: 1000 }
   );
 
   if (!response.ok) {
@@ -278,9 +271,11 @@ async function handleGetVoices(env: Env, requestId: string): Promise<Response> {
   }
 
   try {
-    const response = await fetch('https://api.elevenlabs.io/v1/voices', {
-      headers: { 'xi-api-key': apiKey },
-    });
+    const response = await fetchWithRetry(
+      'https://api.elevenlabs.io/v1/voices',
+      { headers: { 'xi-api-key': apiKey } },
+      { maxRetries: 2, initialDelayMs: 1000 }
+    );
 
     if (!response.ok) {
       throw new Error(`ElevenLabs API error: ${response.status}`);
@@ -303,22 +298,4 @@ async function handleGetVoices(env: Env, requestId: string): Promise<Response> {
   }
 }
 
-function createErrorResponse(
-  message: string,
-  code: string,
-  requestId: string,
-  status: number,
-  details?: Record<string, any>
-): Response {
-  const errorResponse: ErrorResponse = {
-    error: message,
-    error_code: code,
-    request_id: requestId,
-    details,
-  };
-
-  return Response.json(errorResponse, {
-    status,
-    headers: { 'X-Request-ID': requestId },
-  });
-}
+// createErrorResponse imported from shared/http
