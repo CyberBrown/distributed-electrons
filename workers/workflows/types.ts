@@ -405,3 +405,109 @@ export interface NexusResponse {
   retry_count?: number;
   error?: string;
 }
+
+// ============================================================================
+// Prime Workflow Types
+// ============================================================================
+
+/**
+ * Task type classification for routing
+ */
+export type TaskType = 'code' | 'text' | 'video';
+
+/**
+ * Workflow binding type (for Cloudflare Workflows)
+ */
+interface Workflow {
+  create(options?: { id?: string; params?: unknown }): Promise<WorkflowInstance>;
+  get(id: string): Promise<WorkflowInstance>;
+}
+
+interface WorkflowInstance {
+  id: string;
+  status(): Promise<{
+    status: 'queued' | 'running' | 'paused' | 'complete' | 'errored' | 'terminated' | 'waiting';
+    output?: unknown;
+    error?: string;
+  }>;
+}
+
+/**
+ * Parameters for PrimeWorkflow - the unified entry point
+ */
+export interface PrimeWorkflowParams {
+  /** Unique task identifier from caller */
+  task_id: string;
+
+  /** Task title (used for classification) */
+  title: string;
+
+  /** Full task description */
+  description: string;
+
+  /** Task context - provides signals for classification */
+  context?: {
+    /** GitHub repo (owner/repo format) - signals code task */
+    repo?: string;
+    /** Target branch for code changes */
+    branch?: string;
+    /** Relevant file paths */
+    files?: string[];
+    /** Video timeline - signals video task */
+    timeline?: Timeline;
+    /** Video output config */
+    output?: OutputConfig;
+    /** System prompt for text generation */
+    system_prompt?: string;
+    /** Domain area (work, personal, etc.) */
+    domain?: string;
+    /** Energy required (low, medium, high) */
+    energy_required?: string;
+    /** Parent idea if from Nexus idea execution */
+    parent_idea?: object;
+  };
+
+  /** Hints from the caller - suggestions only, DE decides */
+  hints?: {
+    /** Suggested workflow type */
+    workflow?: 'code-execution' | 'text-generation' | 'video-render';
+    /** Suggested provider (e.g., 'claude', 'gemini') */
+    provider?: string;
+    /** Suggested model (e.g., 'claude-3-opus') */
+    model?: string;
+  };
+
+  /** Callback URL for result notification */
+  callback_url?: string;
+
+  /** Overall timeout in milliseconds (default: 300000 = 5 min) */
+  timeout_ms?: number;
+}
+
+/**
+ * Result from PrimeWorkflow execution
+ */
+export interface PrimeWorkflowResult {
+  success: boolean;
+  task_id: string;
+  task_type: TaskType;
+  sub_workflow_id?: string;
+  runner_used?: string;
+  output?: string;
+  error?: string;
+  duration_ms: number;
+}
+
+/**
+ * Environment bindings for PrimeWorkflow
+ */
+export interface PrimeEnv extends NexusEnv {
+  /** DE Workflows worker URL (for triggering sub-workflows) */
+  DE_WORKFLOWS_URL?: string;
+
+  /** Workflow bindings */
+  PRIME_WORKFLOW: Workflow;
+  CODE_EXECUTION_WORKFLOW: Workflow;
+  TEXT_GENERATION_WORKFLOW: Workflow;
+  VIDEO_RENDER_WORKFLOW: Workflow;
+}
