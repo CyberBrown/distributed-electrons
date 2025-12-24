@@ -851,12 +851,14 @@ export default {
           }
         }
 
-        // Default: Claude executor
-        // If on-prem runner is configured, delegate to it
-        if (env.CLAUDE_RUNNER_URL && env.RUNNER_SECRET) {
-          console.log(`[EXEC ${requestId}] On-prem Claude runner configured, delegating...`);
+        // Default: Claude executor with Gemini fallback
+        // Try claude-runner first, then gemini-runner if claude fails
+        let claudeError: string | null = null;
 
-          const runnerResponse = await delegateToRunner(
+        if (env.CLAUDE_RUNNER_URL && env.RUNNER_SECRET) {
+          console.log(`[EXEC ${requestId}] Attempting claude-runner...`);
+
+          const claudeResponse = await delegateToRunner(
             env,
             env.CLAUDE_RUNNER_URL,
             body.task,
@@ -872,33 +874,93 @@ export default {
             }
           );
 
-          // If runner succeeded or returned an auth error, return that response
-          // Only fall back to sandbox if runner is unreachable
-          const runnerResult = await runnerResponse.clone().json() as { error_code?: string };
-          if (runnerResult.error_code !== 'RUNNER_UNREACHABLE') {
-            return addCorsHeaders(runnerResponse);
+          const claudeResult = await claudeResponse.clone().json() as { success?: boolean; error_code?: string; error?: string };
+
+          // If claude succeeded, return it
+          if (claudeResult.success) {
+            return addCorsHeaders(claudeResponse);
           }
 
-          // Runner unreachable - fall back to sandbox execution
-          console.log(`[EXEC ${requestId}] Runner unreachable, falling back to sandbox`);
+          // Claude failed - log and try gemini fallback
+          claudeError = claudeResult.error_code || claudeResult.error || 'Unknown error';
+          console.log(`[EXEC ${requestId}] claude-runner failed (${claudeError}), trying gemini fallback...`);
+        } else {
+          claudeError = 'claude-runner not configured';
+          console.log(`[EXEC ${requestId}] claude-runner not configured, trying gemini...`);
         }
 
-        // Fallback to handleExecute (for sandbox or if no runner configured)
-        const response = await handleExecute(request, env, requestId);
-        return addCorsHeaders(response);
+        // Gemini fallback
+        if (env.GEMINI_RUNNER_URL && env.GEMINI_RUNNER_SECRET) {
+          console.log(`[EXEC ${requestId}] Attempting gemini-runner fallback...`);
+
+          const geminiResponse = await delegateToGeminiRunner(
+            env,
+            env.GEMINI_RUNNER_URL,
+            body.task,
+            body.repo,
+            env.GEMINI_RUNNER_SECRET,
+            requestId,
+            {
+              timeout_ms: body.options?.timeout_ms,
+            }
+          );
+
+          const geminiResult = await geminiResponse.clone().json() as { success?: boolean; error_code?: string; error?: string };
+
+          // If gemini succeeded, return it
+          if (geminiResult.success) {
+            console.log(`[EXEC ${requestId}] gemini-runner fallback succeeded`);
+            return addCorsHeaders(geminiResponse);
+          }
+
+          // Both runners failed
+          const geminiError = geminiResult.error_code || geminiResult.error || 'Unknown error';
+          console.error(`[EXEC ${requestId}] Both runners failed. Claude: ${claudeError}, Gemini: ${geminiError}`);
+
+          return addCorsHeaders(
+            createErrorResponse(
+              `Both runners failed. Claude: ${claudeError}. Gemini: ${geminiError}`,
+              'ALL_RUNNERS_FAILED',
+              requestId,
+              503
+            )
+          );
+        }
+
+        // No gemini configured - return claude error
+        console.error(`[EXEC ${requestId}] claude-runner failed and gemini-runner not configured`);
+        return addCorsHeaders(
+          createErrorResponse(
+            `Claude runner failed (${claudeError}) and gemini fallback not configured`,
+            'RUNNER_FAILED_NO_FALLBACK',
+            requestId,
+            503
+          )
+        );
       }
 
       if (url.pathname === '/health' && request.method === 'GET') {
-        const runnerUrl = env.CLAUDE_RUNNER_URL || DEFAULT_RUNNER_URL;
+        const claudeRunnerUrl = env.CLAUDE_RUNNER_URL || DEFAULT_RUNNER_URL;
+        const geminiRunnerUrl = env.GEMINI_RUNNER_URL || DEFAULT_GEMINI_RUNNER_URL;
         const healthResponse: HealthResponse = {
           status: 'healthy',
           service: 'sandbox-executor',
           timestamp: new Date().toISOString(),
-          version: '2.0.0',
-          runner_url: runnerUrl,
+          version: '2.1.0', // Bumped for fallback support
+          runner_url: claudeRunnerUrl,
           runner_configured: !!env.RUNNER_SECRET,
         };
-        return addCorsHeaders(Response.json(healthResponse));
+
+        // Add fallback info to health response
+        const extendedHealth = {
+          ...healthResponse,
+          fallback: {
+            gemini_runner_url: geminiRunnerUrl,
+            gemini_configured: !!(env.GEMINI_RUNNER_URL && env.GEMINI_RUNNER_SECRET),
+          },
+        };
+
+        return addCorsHeaders(Response.json(extendedHealth));
       }
 
       return addCorsHeaders(
