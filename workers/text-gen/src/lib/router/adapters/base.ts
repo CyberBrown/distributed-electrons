@@ -15,7 +15,7 @@ import type {
  * Error patterns that indicate quota exhaustion
  */
 export const QUOTA_ERROR_PATTERNS = [
-  /credit balance is too low/i,
+  /credit balance.*too low/i,  // Anthropic billing error
   /insufficient_quota/i,
   /rate_limit_exceeded/i,
   /billing.*issue/i,
@@ -29,6 +29,8 @@ export const QUOTA_ERROR_PATTERNS = [
   /no credits remaining/i,
   /subscription.*expired/i,
   /api key.*expired/i,
+  /exceeded.*monthly.*limit/i,  // Usage limits
+  /spending.*limit/i,
 ];
 
 /**

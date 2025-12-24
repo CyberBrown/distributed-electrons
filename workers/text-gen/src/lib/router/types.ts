@@ -13,6 +13,42 @@ export type SpeedTier = 'fast' | 'medium' | 'slow';
 export type AuthType = 'api_key' | 'bearer' | 'none';
 export type ProviderType = 'api' | 'local' | 'gateway';
 
+/**
+ * Routing tier for LLM requests
+ * - 'text-only': Simple text tasks (classification, summarization, JSON extraction)
+ *   Routes: Spark (local) → z.ai → cheap cloud providers
+ * - 'code': Complex tasks requiring tool use, code generation, planning
+ *   Routes: Through sandbox-executor with full capabilities
+ * - 'auto': Automatically classify based on task characteristics
+ */
+export type RoutingTier = 'text-only' | 'code' | 'auto';
+
+/**
+ * Task types that are text-only (no code execution needed)
+ */
+export const TEXT_ONLY_TASK_TYPES = [
+  'classification',
+  'summarization',
+  'extraction',
+  'qa',
+  'translation',
+  'rewrite',
+  'sentiment',
+  'entity_extraction',
+] as const;
+
+/**
+ * Task types that require code execution tier
+ */
+export const CODE_TASK_TYPES = [
+  'code_generation',
+  'code_review',
+  'planning',
+  'tool_use',
+  'multi_step',
+  'agentic',
+] as const;
+
 // ============================================================================
 // Database Models
 // ============================================================================
@@ -113,6 +149,10 @@ export interface TextOptions {
   temperature?: number;
   top_p?: number;
   stop_sequences?: string[];
+  /** Task type hint for routing (e.g., 'classification', 'code_generation') */
+  task_type?: string;
+  /** Override routing tier: 'text-only' for fast/cheap, 'code' for full capabilities */
+  routing_tier?: RoutingTier;
 }
 
 export interface ImageOptions {
@@ -313,6 +353,17 @@ export interface RouterEnv {
   // Local providers
   SPARK_LOCAL_URL?: string;
   SPARK_API_KEY?: string;
+
+  // Queue-aware routing (Nexus integration)
+  NEXUS_URL?: string;  // e.g., https://nexus-mcp.solamp.workers.dev
+  NEXUS_SERVICE_TOKEN?: string;  // For authenticated Nexus API calls
+
+  /**
+   * Queue depth threshold for text-only routing
+   * When code queue depth exceeds this, text-compatible tasks route to text-only tier
+   * Default: 5
+   */
+  QUEUE_DEPTH_THRESHOLD?: string;
 }
 
 // ============================================================================

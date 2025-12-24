@@ -15,6 +15,7 @@ import type {
   MediaOptions,
   StepMeta,
   TransformContext,
+  TextOptions,
 } from './types';
 import { ProviderError, NoAvailableProviderError } from './types';
 import { Registry } from './registry';
@@ -23,9 +24,17 @@ import { transformerRegistry } from './transformer';
 import { adapterRegistry, isQuotaError, isTransientError } from './adapters';
 import { WorkflowEngine } from './workflows/engine';
 import { getBuiltInWorkflow } from './workflows/templates';
+import { TextOnlyRouter } from './text-only-router';
+import { shouldUseTextOnlyTier, getQueueStatus, isCodeQueueCongested } from './queue-aware-router';
 
 // Re-export types
 export * from './types';
+
+// Re-export text-only routing utilities
+export { classifyRoutingTier, TextOnlyRouter } from './text-only-router';
+
+// Re-export queue-aware routing utilities
+export { shouldUseTextOnlyTier, getQueueStatus, isCodeQueueCongested } from './queue-aware-router';
 
 /**
  * Router configuration
@@ -43,14 +52,18 @@ export class Router {
   private registry: Registry;
   private selector: Selector;
   private workflowEngine: WorkflowEngine;
+  private textOnlyRouter: TextOnlyRouter;
+  private env: RouterEnv;
 
   constructor(
     env: RouterEnv,
     config: RouterConfig = {}
   ) {
+    this.env = env;
     this.registry = new Registry(env.DB);
     this.selector = new Selector(this.registry, env);
     this.workflowEngine = new WorkflowEngine(this);
+    this.textOnlyRouter = new TextOnlyRouter(env);
     // Config stored for future retry/timeout logic
     void config.maxRetries;
     void config.defaultTimeout;
@@ -71,6 +84,31 @@ export class Router {
    */
   private async routeSimple(request: SimpleRequest): Promise<RouterResponse> {
     const startTime = Date.now();
+
+    // For text-gen worker, check if we should use the text-only tier
+    if (request.worker === 'text-gen') {
+      const textOptions = request.options as TextOptions | undefined;
+
+      // Use queue-aware routing to determine tier
+      const { useTextOnly, reason } = await shouldUseTextOnlyTier(
+        request.prompt,
+        textOptions,
+        this.env
+      );
+
+      if (useTextOnly) {
+        console.log(`Using text-only routing tier: ${reason}`);
+        const textOnlyResult = await this.routeTextOnly(request, startTime);
+        if (textOnlyResult) {
+          return textOnlyResult;
+        }
+        // Fall through to standard routing if text-only fails
+        console.log('Text-only routing failed, falling back to standard routing');
+      } else {
+        console.log(`Using standard routing: ${reason}`);
+      }
+    }
+
     const attemptedProviders: string[] = [];
     let lastError: Error | null = null;
 
@@ -173,6 +211,48 @@ export class Router {
         total_latency_ms: Date.now() - startTime,
       },
     };
+  }
+
+  /**
+   * Route a text-only request through the fast provider chain
+   * Returns null if all text-only providers fail (caller should fall back to standard routing)
+   */
+  private async routeTextOnly(
+    request: SimpleRequest,
+    startTime: number
+  ): Promise<RouterResponse | null> {
+    try {
+      const textOptions = (request.options || {}) as TextOptions;
+      const result = await this.textOnlyRouter.route(request.prompt, textOptions);
+
+      if (!result) {
+        return null;
+      }
+
+      const stepMeta: StepMeta = {
+        id: 'result',
+        worker: request.worker,
+        provider: result.provider,
+        model: result.result.model,
+        latency_ms: Date.now() - startTime,
+        tokens_used: result.result.tokens_used,
+        cost_cents: 0, // Text-only providers are free or very cheap
+      };
+
+      return {
+        success: true,
+        results: { result: result.result },
+        _meta: {
+          request_type: 'simple',
+          steps: [stepMeta],
+          total_cost_cents: 0,
+          total_latency_ms: stepMeta.latency_ms,
+        },
+      };
+    } catch (error) {
+      console.error('Text-only routing error:', error);
+      return null;
+    }
   }
 
   /**
@@ -329,6 +409,27 @@ export class Router {
    */
   async getStats() {
     return this.registry.getStats();
+  }
+
+  /**
+   * Get health status of text-only providers (Spark, z.ai)
+   */
+  async getTextOnlyHealth() {
+    return this.textOnlyRouter.checkHealth();
+  }
+
+  /**
+   * Get Nexus execution queue status (for queue-aware routing)
+   */
+  async getQueueStatus() {
+    return getQueueStatus(this.env);
+  }
+
+  /**
+   * Check if the code execution queue is congested
+   */
+  async isQueueCongested() {
+    return isCodeQueueCongested(this.env);
   }
 
   /**
