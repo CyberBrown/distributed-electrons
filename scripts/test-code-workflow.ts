@@ -127,8 +127,9 @@ async function testCodeClassification(): Promise<TestResult> {
       { query: 'write a function to parse JSON', expected: 'code' },
     ];
 
-    // Test cases that should NOT be classified as code
-    const nonCodeRequests = [
+    // Test cases that should NOT be classified as code (reserved for future testing)
+    // TODO: Add negative test cases when classification can be tested directly
+    void [
       { query: 'what is the capital of France', expected: 'other' },
       { query: 'summarize this document', expected: 'other' },
     ];

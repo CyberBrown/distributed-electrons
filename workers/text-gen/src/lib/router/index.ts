@@ -43,19 +43,17 @@ export class Router {
   private registry: Registry;
   private selector: Selector;
   private workflowEngine: WorkflowEngine;
-  private _config: RouterConfig; // Reserved for future retry/timeout logic
 
   constructor(
-    private _env: RouterEnv, // Reserved for direct env access
+    env: RouterEnv,
     config: RouterConfig = {}
   ) {
-    this.registry = new Registry(_env.DB);
-    this.selector = new Selector(this.registry, _env);
+    this.registry = new Registry(env.DB);
+    this.selector = new Selector(this.registry, env);
     this.workflowEngine = new WorkflowEngine(this);
-    this._config = {
-      maxRetries: config.maxRetries ?? 3,
-      defaultTimeout: config.defaultTimeout ?? 60000,
-    };
+    // Config stored for future retry/timeout logic
+    void config.maxRetries;
+    void config.defaultTimeout;
   }
 
   /**

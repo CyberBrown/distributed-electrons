@@ -9,7 +9,6 @@ import type {
   ActivityFeedItem,
   EventAction,
   EventableType,
-  EventEnv,
   EventEnvWithContext,
 } from './types';
 

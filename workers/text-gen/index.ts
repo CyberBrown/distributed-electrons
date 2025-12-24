@@ -14,6 +14,7 @@ import type {
 import {
   applyPayloadMapping,
   applyResponseMapping,
+  validatePayloadMapping,
 } from '../shared/utils/payload-mapper';
 import {
   fetchModelConfigCached,

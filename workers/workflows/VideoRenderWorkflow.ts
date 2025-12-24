@@ -20,7 +20,6 @@ import type {
   Env,
   VideoRenderParams,
   Timeline,
-  ShotstackSubmitResult,
   ShotstackStatusResult,
   RenderResult,
   DeliveryPayload,
@@ -32,7 +31,7 @@ export class VideoRenderWorkflow extends WorkflowEntrypoint<Env, VideoRenderPara
    * Main workflow execution
    */
   override async run(event: WorkflowEvent<VideoRenderParams>, step: WorkflowStep) {
-    const { request_id, app_id, instance_id, timeline, output, callback_url } = event.payload;
+    const { request_id, app_id: _appId, instance_id: _instanceId, timeline, output, callback_url } = event.payload;
 
     console.log(`[VideoRenderWorkflow] Starting for request ${request_id}`);
 

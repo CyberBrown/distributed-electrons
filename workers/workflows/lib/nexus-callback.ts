@@ -77,7 +77,8 @@ async function markTaskComplete(
   passphrase: string,
   result: NexusExecutionResult
 ): Promise<boolean> {
-  const payload: NexusTaskUpdatePayload = {
+  // Build payload for potential future use (currently using inline object for simplified endpoint)
+  const _payload: NexusTaskUpdatePayload = {
     task_id: result.task_id,
     status: 'completed',
     result: {

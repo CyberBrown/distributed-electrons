@@ -193,7 +193,7 @@ export async function storeOAuthCredentials(
  * Note: This endpoint is public since it only returns status, not credentials
  */
 export async function getOAuthStatus(
-  request: Request,
+  _request: Request,
   env: Env
 ): Promise<Response> {
   const requestId = generateRequestId();

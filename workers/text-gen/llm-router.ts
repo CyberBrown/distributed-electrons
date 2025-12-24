@@ -7,7 +7,6 @@ import type { Env, TextResult, GenerateOptions } from './types';
 import {
   createProviderRegistry,
   getAvailableProviders,
-  findProviderForModel,
   markProviderExhausted,
   markProviderError,
   markProviderHealthy,
@@ -81,7 +80,7 @@ export class LLMRouter {
     routerOptions: RouterOptions = {}
   ): Promise<RouterResult> {
     const {
-      maxRetries = 3,
+      maxRetries: _maxRetries = 3, // Reserved for future retry logic
       preferredProvider,
       excludeProviders = [],
       requireStreaming = false,
