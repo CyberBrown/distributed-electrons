@@ -315,16 +315,19 @@ export interface TextGenerationEnv {
   /** Nemotron/Spark vLLM URL */
   SPARK_VLLM_URL?: string;
 
-  /** z.ai API key */
+  /** Cloudflare AI Gateway token - when set, routes API calls through Gateway */
+  CF_AIG_TOKEN?: string;
+
+  /** z.ai API key (direct API - not routed through Gateway) */
   ZAI_API_KEY?: string;
 
-  /** Anthropic API key */
+  /** Anthropic API key (fallback if no Gateway token) */
   ANTHROPIC_API_KEY?: string;
 
-  /** Gemini API key */
+  /** Gemini API key (fallback if no Gateway token) */
   GEMINI_API_KEY?: string;
 
-  /** OpenAI API key */
+  /** OpenAI API key (fallback if no Gateway token) */
   OPENAI_API_KEY?: string;
 
   /** Nexus API URL for queue checking */

@@ -30,6 +30,12 @@ const DEFAULT_SPARK_VLLM_URL = 'https://vllm.shiftaltcreate.com';
 const DEFAULT_CLAUDE_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
 const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini.spark.distributedelectrons.com';
 
+// AI Gateway URLs - all API calls route through Cloudflare AI Gateway
+const AI_GATEWAY_BASE = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway';
+const GATEWAY_ANTHROPIC_URL = `${AI_GATEWAY_BASE}/anthropic`;
+const GATEWAY_OPENAI_URL = `${AI_GATEWAY_BASE}/openai`;
+const GATEWAY_GOOGLE_URL = `${AI_GATEWAY_BASE}/google-ai-studio`;
+
 // Queue depth threshold - skip runners if more than this many tasks queued
 const DEFAULT_QUEUE_THRESHOLD = 3;
 
@@ -240,32 +246,38 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
       reason: nemotronHealthy ? 'healthy' : 'unreachable',
     });
 
-    // 4. z.ai - available if API key configured
+    // Check if AI Gateway is configured (handles API keys via BYOK)
+    const hasGateway = !!this.env.CF_AIG_TOKEN;
+
+    // 4. z.ai - available if API key configured (not routed through Gateway)
     results.push({
       provider: 'zai',
       available: !!this.env.ZAI_API_KEY,
       reason: this.env.ZAI_API_KEY ? 'API key configured' : 'no API key',
     });
 
-    // 5. Anthropic - available if API key configured
+    // 5. Anthropic - available if Gateway token OR API key configured
+    const anthropicAvailable = hasGateway || !!this.env.ANTHROPIC_API_KEY;
     results.push({
       provider: 'anthropic',
-      available: !!this.env.ANTHROPIC_API_KEY,
-      reason: this.env.ANTHROPIC_API_KEY ? 'API key configured' : 'no API key',
+      available: anthropicAvailable,
+      reason: hasGateway ? 'via AI Gateway' : (this.env.ANTHROPIC_API_KEY ? 'API key configured' : 'no API key'),
     });
 
-    // 6. Gemini API - available if API key configured
+    // 6. Gemini API - available if Gateway token OR API key configured
+    const geminiAvailable = hasGateway || !!this.env.GEMINI_API_KEY;
     results.push({
       provider: 'gemini',
-      available: !!this.env.GEMINI_API_KEY,
-      reason: this.env.GEMINI_API_KEY ? 'API key configured' : 'no API key',
+      available: geminiAvailable,
+      reason: hasGateway ? 'via AI Gateway' : (this.env.GEMINI_API_KEY ? 'API key configured' : 'no API key'),
     });
 
-    // 7. OpenAI - available if API key configured
+    // 7. OpenAI - available if Gateway token OR API key configured
+    const openaiAvailable = hasGateway || !!this.env.OPENAI_API_KEY;
     results.push({
       provider: 'openai',
-      available: !!this.env.OPENAI_API_KEY,
-      reason: this.env.OPENAI_API_KEY ? 'API key configured' : 'no API key',
+      available: openaiAvailable,
+      reason: hasGateway ? 'via AI Gateway' : (this.env.OPENAI_API_KEY ? 'API key configured' : 'no API key'),
     });
 
     return results;
@@ -539,7 +551,7 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
   }
 
   /**
-   * Call Anthropic API
+   * Call Anthropic API via AI Gateway
    */
   private async callAnthropic(params: {
     prompt: string;
@@ -547,13 +559,26 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     max_tokens: number;
     temperature: number;
   }): Promise<{ text: string; tokens_used?: number }> {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // Route through AI Gateway when token is available
+    const useGateway = !!this.env.CF_AIG_TOKEN;
+    const url = useGateway
+      ? `${GATEWAY_ANTHROPIC_URL}/v1/messages`
+      : 'https://api.anthropic.com/v1/messages';
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    };
+
+    if (useGateway) {
+      headers['cf-aig-authorization'] = `Bearer ${this.env.CF_AIG_TOKEN}`;
+    } else {
+      headers['x-api-key'] = this.env.ANTHROPIC_API_KEY!;
+    }
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
+      headers,
       body: JSON.stringify({
         model: 'claude-3-5-sonnet-20241022',
         max_tokens: params.max_tokens,
@@ -581,7 +606,7 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
   }
 
   /**
-   * Call Gemini API
+   * Call Gemini API via AI Gateway
    */
   private async callGeminiApi(params: {
     prompt: string;
@@ -593,20 +618,31 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
       ? `${params.system_prompt}\n\n${params.prompt}`
       : params.prompt;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }],
-          generationConfig: {
-            maxOutputTokens: params.max_tokens,
-            temperature: params.temperature,
-          },
-        }),
-      }
-    );
+    // Route through AI Gateway when token is available
+    const useGateway = !!this.env.CF_AIG_TOKEN;
+    const url = useGateway
+      ? `${GATEWAY_GOOGLE_URL}/v1beta/models/gemini-1.5-flash:generateContent`
+      : `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.env.GEMINI_API_KEY}`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (useGateway) {
+      headers['cf-aig-authorization'] = `Bearer ${this.env.CF_AIG_TOKEN}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: fullPrompt }] }],
+        generationConfig: {
+          maxOutputTokens: params.max_tokens,
+          temperature: params.temperature,
+        },
+      }),
+    });
 
     if (!response.ok) {
       const error = await response.text();
@@ -627,7 +663,7 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
   }
 
   /**
-   * Call OpenAI API
+   * Call OpenAI API via AI Gateway
    */
   private async callOpenAI(params: {
     prompt: string;
@@ -641,12 +677,25 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     }
     messages.push({ role: 'user', content: params.prompt });
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Route through AI Gateway when token is available
+    const useGateway = !!this.env.CF_AIG_TOKEN;
+    const url = useGateway
+      ? `${GATEWAY_OPENAI_URL}/v1/chat/completions`
+      : 'https://api.openai.com/v1/chat/completions';
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (useGateway) {
+      headers['cf-aig-authorization'] = `Bearer ${this.env.CF_AIG_TOKEN}`;
+    } else {
+      headers['Authorization'] = `Bearer ${this.env.OPENAI_API_KEY}`;
+    }
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.env.OPENAI_API_KEY}`,
-      },
+      headers,
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages,
