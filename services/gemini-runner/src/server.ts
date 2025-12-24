@@ -13,6 +13,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 const app = express();
@@ -183,7 +184,7 @@ function getGeminiConfigPath(): string {
  * Check if Gemini CLI is authenticated
  * Gemini can use: Google login, API key, or Vertex AI
  */
-function checkAuthStatus(): { configured: boolean; method?: string; details?: string } {
+async function checkAuthStatus(): Promise<{ configured: boolean; method?: string; details?: string }> {
   // Check for API key in environment
   if (process.env.GEMINI_API_KEY) {
     return {
@@ -206,7 +207,7 @@ function checkAuthStatus(): { configured: boolean; method?: string; details?: st
   const configPath = getGeminiConfigPath();
   const oauthCredsPath = path.join(configPath, 'oauth_creds.json');
 
-  if (fs.existsSync(oauthCredsPath)) {
+  if (await fileExists(oauthCredsPath)) {
     return {
       configured: true,
       method: 'google_oauth',
@@ -216,7 +217,7 @@ function checkAuthStatus(): { configured: boolean; method?: string; details?: st
 
   // Check for application default credentials
   const adcPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (adcPath && fs.existsSync(adcPath)) {
+  if (adcPath && await fileExists(adcPath)) {
     return {
       configured: true,
       method: 'service_account',
@@ -228,17 +229,29 @@ function checkAuthStatus(): { configured: boolean; method?: string; details?: st
 }
 
 /**
+ * Async helper to check if a file exists
+ */
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fsPromises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Clone or update a git repository
  */
 async function prepareRepo(repoUrl: string): Promise<string> {
   const repoHash = Buffer.from(repoUrl).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
   const repoDir = path.join(REPOS_DIR, repoHash);
 
-  if (!fs.existsSync(REPOS_DIR)) {
-    fs.mkdirSync(REPOS_DIR, { recursive: true });
+  if (!await fileExists(REPOS_DIR)) {
+    await fsPromises.mkdir(REPOS_DIR, { recursive: true });
   }
 
-  if (fs.existsSync(repoDir)) {
+  if (await fileExists(repoDir)) {
     await runCommand('git', ['fetch', '--all'], repoDir);
     await runCommand('git', ['reset', '--hard', 'origin/HEAD'], repoDir);
     await runCommand('git', ['clean', '-fdx'], repoDir);
@@ -370,8 +383,8 @@ async function executeGemini(
 /**
  * Health check endpoint
  */
-app.get('/health', (_req: Request, res: Response) => {
-  const authStatus = checkAuthStatus();
+app.get('/health', async (_req: Request, res: Response) => {
+  const authStatus = await checkAuthStatus();
 
   res.json({
     status: 'healthy',
@@ -391,8 +404,8 @@ app.get('/health', (_req: Request, res: Response) => {
 /**
  * Auth status endpoint (authenticated)
  */
-app.get('/auth/status', authenticate, (_req: Request, res: Response) => {
-  const status = checkAuthStatus();
+app.get('/auth/status', authenticate, async (_req: Request, res: Response) => {
+  const status = await checkAuthStatus();
   res.json(status);
 });
 
@@ -410,7 +423,7 @@ app.post('/execute', authenticate, async (req: Request, res: Response) => {
     }
 
     // Check auth status first
-    const authStatus = checkAuthStatus();
+    const authStatus = await checkAuthStatus();
     if (!authStatus.configured) {
       return res.status(401).json({
         success: false,
@@ -478,16 +491,16 @@ app.post('/execute', authenticate, async (req: Request, res: Response) => {
 /**
  * List cached repositories
  */
-app.get('/repos', authenticate, (_req: Request, res: Response) => {
+app.get('/repos', authenticate, async (_req: Request, res: Response) => {
   try {
-    if (!fs.existsSync(REPOS_DIR)) {
+    if (!await fileExists(REPOS_DIR)) {
       return res.json({ repos: [] });
     }
 
-    const repos = fs.readdirSync(REPOS_DIR).filter((name) => {
-      const stat = fs.statSync(path.join(REPOS_DIR, name));
-      return stat.isDirectory();
-    });
+    const entries = await fsPromises.readdir(REPOS_DIR, { withFileTypes: true });
+    const repos = entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
 
     res.json({ repos });
   } catch (error) {
@@ -498,11 +511,11 @@ app.get('/repos', authenticate, (_req: Request, res: Response) => {
 /**
  * Clear cached repositories
  */
-app.delete('/repos', authenticate, (_req: Request, res: Response) => {
+app.delete('/repos', authenticate, async (_req: Request, res: Response) => {
   try {
-    if (fs.existsSync(REPOS_DIR)) {
-      fs.rmSync(REPOS_DIR, { recursive: true, force: true });
-      fs.mkdirSync(REPOS_DIR, { recursive: true });
+    if (await fileExists(REPOS_DIR)) {
+      await fsPromises.rm(REPOS_DIR, { recursive: true, force: true });
+      await fsPromises.mkdir(REPOS_DIR, { recursive: true });
     }
     res.json({ cleared: true });
   } catch (error) {
@@ -517,9 +530,9 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Gemini Runner listening on port ${PORT}`);
-  console.log(`Auth status:`, checkAuthStatus());
+  console.log(`Auth status:`, await checkAuthStatus());
 
   if (!RUNNER_SECRET) {
     console.warn('WARNING: RUNNER_SECRET not set - authentication disabled!');
