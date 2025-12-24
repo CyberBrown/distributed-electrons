@@ -21,8 +21,7 @@ import type {
   SDKExecuteResponse,
 } from './types';
 
-// Re-export Sandbox for Durable Object binding
-export { Sandbox } from '@cloudflare/sandbox';
+// Note: Sandbox DO was removed in migration v2 - no longer exported
 
 // Default runner URL (via Cloudflare Tunnel)
 const DEFAULT_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';

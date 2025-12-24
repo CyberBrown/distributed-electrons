@@ -21,7 +21,7 @@ MAX_EXECUTION_TIME = "300000"
 
 # AI Gateway Logging Configuration
 # Set AI_GATEWAY_LOG_ENABLED = "true" to enable execution logging to AI Gateway
-AI_GATEWAY_LOG_ENABLED = "false"
+AI_GATEWAY_LOG_ENABLED = "true"
 
 # Secrets (set with: wrangler secret put <NAME>)
 # - CF_AIG_TOKEN (for SDK mode via AI Gateway)

@@ -337,14 +337,12 @@ async function handleIntake(
           id: requestId,
           params: {
             task_id: taskId,
-            request_id: requestId,
-            app_id: appId,
-            instance_id: instanceId,
             prompt: prompt,
             repo_url: repoUrl,
             preferred_executor: body.executor || 'claude',
             callback_url: body.callback_url,
-            metadata: body.metadata,
+            context: body.metadata,  // Map metadata to workflow's context field
+            timeout_ms: body.timeout_ms,
           },
         });
 

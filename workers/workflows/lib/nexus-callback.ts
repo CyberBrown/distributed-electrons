@@ -6,6 +6,11 @@
  * - Tracks retry counts for failed tasks
  * - Quarantines tasks after MAX_RETRIES failures
  * - Sends ntfy notifications on quarantine (optional)
+ *
+ * API Endpoints Used:
+ * - POST /api/queue/{queue_id}/complete - Complete a queue task with result
+ * - PATCH /api/tasks/{task_id} - Update task status/fields
+ * - GET /api/tasks/{task_id} - Get task details including retry count
  */
 
 import type {
@@ -23,6 +28,9 @@ const MAX_RETRIES = 5;
 
 /** Default Nexus API URL */
 const DEFAULT_NEXUS_URL = 'https://nexus-mcp.solamp.workers.dev';
+
+/** API base path */
+const API_PREFIX = '/api';
 
 /**
  * Report execution result to Nexus
@@ -80,13 +88,16 @@ async function markTaskComplete(
     },
   };
 
-  const response = await fetch(`${nexusUrl}/tasks/${result.task_id}/complete`, {
+  // Use the complete_task endpoint with notes containing the result
+  const response = await fetch(`${nexusUrl}${API_PREFIX}/tasks/${result.task_id}/complete`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Nexus-Passphrase': passphrase,
+      'X-Passphrase': passphrase,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      notes: `Completed by ${result.executor_used} in ${result.duration_ms}ms. Output: ${(result.output || '').substring(0, 500)}`,
+    }),
   });
 
   if (!response.ok) {
@@ -137,13 +148,21 @@ async function handleTaskFailure(
     await sendQuarantineNotification(env, result, newRetryCount);
   }
 
-  const response = await fetch(`${nexusUrl}/tasks/${result.task_id}/update`, {
-    method: 'POST',
+  // Use the update_task endpoint to update status
+  const updatePayload: Record<string, unknown> = {
+    status: shouldQuarantine ? 'cancelled' : 'next',  // 'next' to retry, 'cancelled' for quarantine
+    description: shouldQuarantine
+      ? `QUARANTINED: ${payload.quarantine_reason}`
+      : `Failed attempt #${newRetryCount}: ${result.error}`,
+  };
+
+  const response = await fetch(`${nexusUrl}${API_PREFIX}/tasks/${result.task_id}`, {
+    method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      'X-Nexus-Passphrase': passphrase,
+      'X-Passphrase': passphrase,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(updatePayload),
   });
 
   if (!response.ok) {
@@ -165,21 +184,34 @@ async function getTaskRetryCount(
   taskId: string
 ): Promise<number> {
   try {
-    const response = await fetch(`${nexusUrl}/tasks/${taskId}`, {
+    // Use task status endpoint to get current state
+    const response = await fetch(`${nexusUrl}${API_PREFIX}/tasks/${taskId}/status`, {
       method: 'GET',
       headers: {
-        'X-Nexus-Passphrase': passphrase,
+        'X-Passphrase': passphrase,
       },
     });
 
     if (!response.ok) {
-      // If task not found or error, assume 0 retries
-      console.warn(`[NexusCallback] Could not get retry count for task ${taskId}, assuming 0`);
-      return 0;
+      // Try alternate endpoint format
+      const altResponse = await fetch(`${nexusUrl}${API_PREFIX}/tasks/${taskId}`, {
+        method: 'GET',
+        headers: {
+          'X-Passphrase': passphrase,
+        },
+      });
+
+      if (!altResponse.ok) {
+        console.warn(`[NexusCallback] Could not get retry count for task ${taskId}, assuming 0`);
+        return 0;
+      }
+
+      const altData = await altResponse.json() as { retry_count?: number; execution_attempts?: number };
+      return altData.retry_count || altData.execution_attempts || 0;
     }
 
-    const data = await response.json() as { retry_count?: number };
-    return data.retry_count || 0;
+    const data = await response.json() as { retry_count?: number; execution_attempts?: number };
+    return data.retry_count || data.execution_attempts || 0;
   } catch (error) {
     console.warn(`[NexusCallback] Error getting retry count: ${error}`);
     return 0;
@@ -232,10 +264,16 @@ export async function checkNexusHealth(env: NexusEnv): Promise<boolean> {
   const nexusUrl = env.NEXUS_API_URL || DEFAULT_NEXUS_URL;
 
   try {
-    const response = await fetch(`${nexusUrl}/health`, {
+    // Root endpoint returns health status
+    const response = await fetch(`${nexusUrl}/`, {
       method: 'GET',
     });
-    return response.ok;
+
+    if (response.ok) {
+      const data = await response.json() as { status?: string };
+      return data.status === 'healthy';
+    }
+    return false;
   } catch {
     return false;
   }

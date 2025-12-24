@@ -103,6 +103,7 @@ export interface IntakePayload {
   executor?: 'claude' | 'gemini';
   task_id?: string;
   prompt?: string;  // Alternative to query for code tasks
+  timeout_ms?: number;  // Execution timeout in milliseconds (default: 300000)
 }
 
 // Response to client
