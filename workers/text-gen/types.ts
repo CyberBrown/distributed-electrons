@@ -49,7 +49,11 @@ export interface Env {
   CONFIG_SERVICE_URL?: string; // Config Service URL
   ENCRYPTION_KEY?: string;
 
-  // API Keys (from secrets)
+  // AI Gateway Configuration (BYOK mode)
+  AI_GATEWAY_URL?: string; // Cloudflare AI Gateway URL
+  CF_AIG_TOKEN?: string; // Cloudflare AI Gateway token for BYOK
+
+  // API Keys (from secrets) - optional if using AI Gateway BYOK
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
 

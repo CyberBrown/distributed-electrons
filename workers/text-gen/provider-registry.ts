@@ -124,6 +124,9 @@ export const TRANSIENT_ERROR_PATTERNS = [
 export function createProviderRegistry(env: Env): ProviderHealthState {
   const providers = new Map<string, ProviderConfig>();
 
+  // Check if AI Gateway is available (allows BYOK for all providers)
+  const hasAIGateway = !!(env as any).CF_AIG_TOKEN && !!(env as any).AI_GATEWAY_URL;
+
   for (const defaultConfig of DEFAULT_PROVIDERS) {
     const config = { ...defaultConfig };
 
@@ -136,12 +139,16 @@ export function createProviderRegistry(env: Env): ProviderHealthState {
       }
     }
 
-    // Check if API keys are available
-    if (config.id === 'anthropic' && !env.ANTHROPIC_API_KEY) {
-      config.healthStatus = 'error'; // No API key configured
+    // Check if API keys are available (or AI Gateway BYOK is configured)
+    if (config.id === 'anthropic') {
+      if (!env.ANTHROPIC_API_KEY && !hasAIGateway) {
+        config.healthStatus = 'error'; // No API key or AI Gateway configured
+      }
     }
-    if (config.id === 'openai' && !env.OPENAI_API_KEY) {
-      config.healthStatus = 'error'; // No API key configured
+    if (config.id === 'openai') {
+      if (!env.OPENAI_API_KEY && !hasAIGateway) {
+        config.healthStatus = 'error'; // No API key or AI Gateway configured
+      }
     }
 
     providers.set(config.id, config);

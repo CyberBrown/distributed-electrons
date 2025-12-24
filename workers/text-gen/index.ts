@@ -53,6 +53,10 @@ function stripProviderPrefix(model: string): string {
  * Create a router with all configured generators
  */
 function createRouterWithGenerators(env: Env): LLMRouter {
+  // AI Gateway configuration for BYOK
+  const aiGatewayUrl = (env as any).AI_GATEWAY_URL as string | undefined;
+  const cfAigToken = (env as any).CF_AIG_TOKEN as string | undefined;
+
   // Generator functions that match the expected signature
   const openaiGenerator = async (
     model: string,
@@ -69,7 +73,8 @@ function createRouterWithGenerators(env: Env): LLMRouter {
     options: any,
     apiKey: string
   ): Promise<TextResult> => {
-    return await generateWithAnthropic(model, prompt, options, apiKey);
+    // Pass AI Gateway credentials for BYOK mode
+    return await generateWithAnthropic(model, prompt, options, apiKey, aiGatewayUrl, cfAigToken);
   };
 
   const sparkLocalGenerator = async (
@@ -551,21 +556,37 @@ async function generateWithOpenAI(
 }
 
 /**
- * Generate text using Anthropic API
+ * Generate text using Anthropic API (direct or via AI Gateway)
  */
 async function generateWithAnthropic(
   model: string,
   prompt: string,
   options: any,
-  apiKey: string
+  apiKey: string,
+  aiGatewayUrl?: string,
+  cfAigToken?: string
 ): Promise<TextResult> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  // Use AI Gateway if available (BYOK mode)
+  const useGateway = aiGatewayUrl && cfAigToken;
+  const url = useGateway
+    ? `${aiGatewayUrl}/anthropic/v1/messages`
+    : 'https://api.anthropic.com/v1/messages';
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'anthropic-version': '2023-06-01',
+  };
+
+  if (useGateway) {
+    // AI Gateway uses CF token for auth, BYOK handles provider keys
+    headers['Authorization'] = `Bearer ${cfAigToken}`;
+  } else {
+    headers['x-api-key'] = apiKey;
+  }
+
+  const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
+    headers,
     body: JSON.stringify({
       model: model,
       messages: [{ role: 'user', content: prompt }],

@@ -225,13 +225,18 @@ export class LLMRouter {
 
   /**
    * Get API key for a provider
+   * Returns direct key if available, or 'gateway' placeholder if AI Gateway BYOK is configured
    */
   private getApiKeyForProvider(providerId: string): string | undefined {
+    // Check if AI Gateway BYOK is available
+    const hasAIGateway = !!(this.env as any).CF_AIG_TOKEN && !!(this.env as any).AI_GATEWAY_URL;
+
     switch (providerId) {
       case 'anthropic':
-        return this.env.ANTHROPIC_API_KEY;
+        // Return direct key if available, or 'gateway' if AI Gateway configured
+        return this.env.ANTHROPIC_API_KEY || (hasAIGateway ? 'gateway' : undefined);
       case 'openai':
-        return this.env.OPENAI_API_KEY;
+        return this.env.OPENAI_API_KEY || (hasAIGateway ? 'gateway' : undefined);
       case 'spark-local':
         // Spark local might use a different auth mechanism
         return (this.env as any).SPARK_API_KEY || 'local';
