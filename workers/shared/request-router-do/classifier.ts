@@ -44,26 +44,28 @@ const SUBTASK_PATTERNS: Record<string, RegExp[]> = {
 };
 
 // Default provider/model mappings
-// Using 'sandbox-executor' for text tasks to leverage Claude Code CLI with OAuth
-// This avoids API usage costs by using Claude.ai Max subscription
+// Simple text tasks use text-gen-workflow (waterfall: runners → Nemotron → APIs)
+// Code tasks use sandbox-executor (Claude Code CLI for agentic code execution)
 const DEFAULT_ROUTING: Record<TaskType, { provider: string; model: string }> = {
-  text: { provider: 'sandbox-executor', model: 'claude-code' },
+  text: { provider: 'text-gen-workflow', model: 'waterfall' },
   image: { provider: 'ideogram', model: 'ideogram-v2' },
   audio: { provider: 'elevenlabs', model: 'eleven_multilingual_v2' },
   video: { provider: 'shotstack', model: 'default' },
   context: { provider: 'gemini', model: 'gemini-context' },
-  unknown: { provider: 'sandbox-executor', model: 'claude-code' },
+  unknown: { provider: 'text-gen-workflow', model: 'waterfall' },
 };
 
 // Subtask-specific routing overrides
-// All text subtasks now use sandbox-executor (Claude Code with OAuth)
+// Code tasks go to sandbox-executor, other text tasks go through text-gen-workflow
 const SUBTASK_ROUTING: Record<string, { provider: string; model: string }> = {
   'image:illustration': { provider: 'gemini', model: 'gemini-nano-banana' },
   'image:photo-realistic': { provider: 'ideogram', model: 'ideogram-v2' },
-  'text:fast': { provider: 'sandbox-executor', model: 'claude-code' },
+  // Simple text tasks use text-gen-workflow (waterfall: runners → Nemotron → APIs)
+  'text:fast': { provider: 'text-gen-workflow', model: 'waterfall' },
+  'text:detailed': { provider: 'text-gen-workflow', model: 'waterfall' },
+  'text:creative': { provider: 'text-gen-workflow', model: 'waterfall' },
+  // Code tasks need Claude Code for agentic code execution
   'text:code': { provider: 'sandbox-executor', model: 'claude-code' },
-  'text:detailed': { provider: 'sandbox-executor', model: 'claude-code' },
-  'text:creative': { provider: 'sandbox-executor', model: 'claude-code' },
 };
 
 /**
@@ -188,6 +190,7 @@ export function getEstimatedProcessingTime(
     'text:anthropic': 2000,
     'text:openai': 1500,
     'text:sandbox-executor': 30000, // Container startup + Claude Code execution
+    'text:text-gen-workflow': 5000, // Waterfall may use fast local providers
     'image:ideogram': 15000,
     'image:gemini': 10000,
     'audio:elevenlabs': 5000,

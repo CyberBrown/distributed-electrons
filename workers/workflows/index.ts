@@ -3,15 +3,11 @@
  * Exports all Cloudflare Workflows for Distributed Electrons
  */
 
-import { CodeExecutionParams } from './types';
+import { CodeExecutionParams, TextGenerationParams } from './types';
 
 export { VideoRenderWorkflow } from './VideoRenderWorkflow';
 export { CodeExecutionWorkflow } from './CodeExecutionWorkflow';
-
-// Future workflows:
-// export { BatchProcessWorkflow } from './BatchProcessWorkflow';
-// export { FallbackChainWorkflow } from './FallbackChainWorkflow';
-// export { HumanApprovalWorkflow } from './HumanApprovalWorkflow';
+export { TextGenerationWorkflow } from './TextGenerationWorkflow';
 
 // Workflow binding type
 interface Workflow {
@@ -31,6 +27,7 @@ interface WorkflowInstance {
 interface Env {
   CODE_EXECUTION_WORKFLOW: Workflow;
   VIDEO_RENDER_WORKFLOW: Workflow;
+  TEXT_GENERATION_WORKFLOW: Workflow;
   // Auth secret for external trigger requests
   NEXUS_PASSPHRASE?: string;
 }
@@ -46,7 +43,7 @@ export default {
       return Response.json({
         status: 'healthy',
         service: 'de-workflows',
-        workflows: ['video-render-workflow', 'code-execution-workflow'],
+        workflows: ['video-render-workflow', 'code-execution-workflow', 'text-generation-workflow'],
         timestamp: new Date().toISOString(),
       });
     }
@@ -126,12 +123,92 @@ export default {
       }
     }
 
+    // POST /workflows/text-generation - Trigger TextGenerationWorkflow via HTTP
+    // Routes text-only tasks through the waterfall: runners → local vLLM → API providers
+    if (url.pathname === '/workflows/text-generation' && request.method === 'POST') {
+      try {
+        // Validate passphrase for authentication
+        const passphrase = request.headers.get('X-Passphrase');
+        if (env.NEXUS_PASSPHRASE && passphrase !== env.NEXUS_PASSPHRASE) {
+          return Response.json({ error: 'Invalid passphrase' }, { status: 401 });
+        }
+
+        const body = await request.json() as {
+          id?: string;
+          params: TextGenerationParams;
+        };
+
+        if (!body.params?.request_id) {
+          return Response.json({ error: 'Missing request_id in params' }, { status: 400 });
+        }
+
+        if (!body.params?.prompt) {
+          return Response.json({ error: 'Missing prompt in params' }, { status: 400 });
+        }
+
+        // Use request_id as workflow instance ID to prevent duplicates
+        const workflowId = body.id || body.params.request_id;
+
+        const instance = await env.TEXT_GENERATION_WORKFLOW.create({
+          id: workflowId,
+          params: body.params,
+        });
+
+        return Response.json({
+          success: true,
+          workflow_id: instance.id,
+          message: 'TextGenerationWorkflow triggered',
+        });
+      } catch (error: any) {
+        // Handle duplicate workflow error gracefully
+        if (error.message?.includes('already exists')) {
+          return Response.json({
+            success: false,
+            error: 'Workflow with this ID already exists',
+            code: 'DUPLICATE_WORKFLOW',
+          }, { status: 409 });
+        }
+        return Response.json({
+          success: false,
+          error: error.message || 'Failed to trigger workflow',
+        }, { status: 500 });
+      }
+    }
+
+    // GET /workflows/text-generation/:id - Get workflow status
+    if (url.pathname.startsWith('/workflows/text-generation/') && request.method === 'GET') {
+      try {
+        const workflowId = url.pathname.replace('/workflows/text-generation/', '');
+        if (!workflowId) {
+          return Response.json({ error: 'Missing workflow ID' }, { status: 400 });
+        }
+
+        const instance = await env.TEXT_GENERATION_WORKFLOW.get(workflowId);
+        const status = await instance.status();
+
+        return Response.json({
+          success: true,
+          workflow_id: workflowId,
+          status: status.status,
+          output: status.output,
+          error: status.error,
+        });
+      } catch (error: any) {
+        return Response.json({
+          success: false,
+          error: error.message || 'Failed to get workflow status',
+        }, { status: 500 });
+      }
+    }
+
     return Response.json({
       error: 'Not found',
       available_endpoints: [
         'GET /health',
         'POST /workflows/code-execution',
         'GET /workflows/code-execution/:id',
+        'POST /workflows/text-generation',
+        'GET /workflows/text-generation/:id',
       ],
     }, { status: 404 });
   },

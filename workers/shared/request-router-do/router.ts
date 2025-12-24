@@ -86,6 +86,16 @@ const DEFAULT_RATE_LIMITS: Record<string, ProviderRateLimit> = {
     current_concurrent: 0,
     last_reset: Date.now(),
   },
+  // Text generation workflow - uses waterfall: runners → Nemotron → API providers
+  // Opportunistically uses runners when idle, falls back through API chain
+  'text-gen-workflow': {
+    provider: 'text-gen-workflow',
+    requests_per_minute: 60,
+    concurrent_requests: 10,
+    current_rpm: 0,
+    current_concurrent: 0,
+    last_reset: Date.now(),
+  },
 };
 
 export class RequestRouter implements DurableObject {

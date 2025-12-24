@@ -21,6 +21,13 @@ name = "code-execution-workflow"
 binding = "CODE_EXECUTION_WORKFLOW"
 class_name = "CodeExecutionWorkflow"
 
+# TextGenerationWorkflow - waterfall routing for text generation
+# Uses: runners (if idle) → Nemotron → z.ai → Anthropic → Gemini → OpenAI
+[[workflows]]
+name = "text-generation-workflow"
+binding = "TEXT_GENERATION_WORKFLOW"
+class_name = "TextGenerationWorkflow"
+
 # D1 Database binding (shared DE database)
 [[d1_databases]]
 binding = "DB"
@@ -43,6 +50,10 @@ SANDBOX_EXECUTOR_URL = "https://sandbox-executor.solamp.workers.dev"
 CLAUDE_RUNNER_URL = "https://claude-runner.shiftaltcreate.com"
 GEMINI_RUNNER_URL = "https://gemini-runner.shiftaltcreate.com"
 NEXUS_API_URL = "https://nexus-mcp.solamp.workers.dev"
+# Spark vLLM endpoint for Nemotron (local inference)
+SPARK_VLLM_URL = "https://vllm.shiftaltcreate.com"
+# Queue depth threshold - skip runners if more tasks are queued (default: 3)
+QUEUE_DEPTH_THRESHOLD = "3"
 
 # Secrets (set via wrangler secret put):
 # - SHOTSTACK_API_KEY
@@ -52,6 +63,10 @@ NEXUS_API_URL = "https://nexus-mcp.solamp.workers.dev"
 # - CF_ACCESS_CLIENT_SECRET (optional - for Cloudflare Access protected runners)
 # - NEXUS_PASSPHRASE (for Nexus MCP server write access)
 # - NTFY_TOPIC (optional - for quarantine notifications)
+# - ZAI_API_KEY (for z.ai API)
+# - ANTHROPIC_API_KEY (for Anthropic API)
+# - GEMINI_API_KEY (for Google Gemini API)
+# - OPENAI_API_KEY (for OpenAI API)
 
 # Custom Domain (optional)
 # [[routes]]

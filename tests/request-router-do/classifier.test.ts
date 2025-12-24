@@ -68,15 +68,24 @@ describe('Task Classifier', () => {
         const result = classifyQuery('Give me a quick answer about the weather');
         expect(result.task_type).toBe('text');
         expect(result.subtask).toBe('fast');
-        // Fast subtask now routes to sandbox-executor (Claude Code with OAuth)
-        expect(result.model).toBe('claude-code');
+        // Fast subtask routes to text-gen-workflow (waterfall)
+        expect(result.model).toBe('waterfall');
       });
 
-      it('should use sandbox-executor as default text provider', () => {
+      it('should use text-gen-workflow as default text provider', () => {
         const result = classifyQuery('Help me write an email');
         expect(result.task_type).toBe('text');
-        // Text tasks now route to sandbox-executor to use Claude.ai Max subscription
+        // Simple text tasks route to text-gen-workflow (waterfall: runners → Nemotron → APIs)
+        expect(result.provider).toBe('text-gen-workflow');
+      });
+
+      it('should use sandbox-executor for code tasks', () => {
+        const result = classifyQuery('Write a function to calculate fibonacci');
+        expect(result.task_type).toBe('text');
+        expect(result.subtask).toBe('code');
+        // Code tasks need Claude Code for agentic code execution
         expect(result.provider).toBe('sandbox-executor');
+        expect(result.model).toBe('claude-code');
       });
     });
 
@@ -168,9 +177,9 @@ describe('Task Classifier', () => {
     it('should use default routing for type without subtask match', () => {
       const result = classifyWithType('Generate something', 'text');
       expect(result.task_type).toBe('text');
-      // Text tasks now route to sandbox-executor (Claude Code with OAuth)
-      expect(result.provider).toBe('sandbox-executor');
-      expect(result.model).toBe('claude-code');
+      // Simple text tasks route to text-gen-workflow (waterfall)
+      expect(result.provider).toBe('text-gen-workflow');
+      expect(result.model).toBe('waterfall');
     });
   });
 

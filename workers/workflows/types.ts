@@ -229,6 +229,115 @@ export interface CodeExecutionCallbackPayload {
 }
 
 // ============================================================================
+// Text Generation Workflow Types
+// ============================================================================
+
+/**
+ * Parameters for TextGenerationWorkflow
+ */
+export interface TextGenerationParams {
+  /** Unique request identifier */
+  request_id: string;
+
+  /** The prompt to generate text for */
+  prompt: string;
+
+  /** System prompt (optional) */
+  system_prompt?: string;
+
+  /** Maximum tokens to generate */
+  max_tokens?: number;
+
+  /** Temperature for generation */
+  temperature?: number;
+
+  /** Optional callback URL for completion notification */
+  callback_url?: string;
+
+  /** Execution timeout in milliseconds (default: 60000 = 1 minute) */
+  timeout_ms?: number;
+}
+
+/**
+ * Provider in the text generation waterfall
+ */
+export type TextProvider =
+  | 'claude-runner'
+  | 'gemini-runner'
+  | 'nemotron'
+  | 'zai'
+  | 'anthropic'
+  | 'gemini'
+  | 'openai';
+
+/**
+ * Provider availability status
+ */
+export interface ProviderStatus {
+  provider: TextProvider;
+  available: boolean;
+  queue_depth?: number;
+  reason?: string;
+}
+
+/**
+ * Result from text generation
+ */
+export interface TextGenerationResult {
+  success: boolean;
+  request_id: string;
+  provider: TextProvider;
+  text?: string;
+  error?: string;
+  tokens_used?: number;
+  duration_ms: number;
+  attempted_providers: TextProvider[];
+}
+
+/**
+ * Environment bindings for TextGenerationWorkflow
+ */
+export interface TextGenerationEnv {
+  /** Claude runner URL (on-prem via Cloudflare Tunnel) */
+  CLAUDE_RUNNER_URL?: string;
+
+  /** Gemini runner URL (on-prem via Cloudflare Tunnel) */
+  GEMINI_RUNNER_URL?: string;
+
+  /** Runner authentication secrets */
+  RUNNER_SECRET?: string;
+  GEMINI_RUNNER_SECRET?: string;
+
+  /** Cloudflare Access credentials for protected runners */
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+
+  /** Nemotron/Spark vLLM URL */
+  SPARK_VLLM_URL?: string;
+
+  /** z.ai API key */
+  ZAI_API_KEY?: string;
+
+  /** Anthropic API key */
+  ANTHROPIC_API_KEY?: string;
+
+  /** Gemini API key */
+  GEMINI_API_KEY?: string;
+
+  /** OpenAI API key */
+  OPENAI_API_KEY?: string;
+
+  /** Nexus API URL for queue checking */
+  NEXUS_API_URL?: string;
+
+  /** Nexus passphrase */
+  NEXUS_PASSPHRASE?: string;
+
+  /** Queue depth threshold - skip runners if queue exceeds this */
+  QUEUE_DEPTH_THRESHOLD?: string;
+}
+
+// ============================================================================
 // Nexus Callback Types
 // ============================================================================
 
