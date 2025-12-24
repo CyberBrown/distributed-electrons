@@ -20,6 +20,12 @@ import {
   fetchModelConfigCached,
   getInstanceConfigCached,
 } from '../shared/config-cache';
+import {
+  addCorsHeaders,
+  createErrorResponse,
+  handleCorsPrelight,
+  getRequestId,
+} from '../shared/http';
 import type {
   Env,
   GenerateRequest,
@@ -108,16 +114,7 @@ export default {
   },
 };
 
-/**
- * Add CORS headers to response
- */
-function addCorsHeaders(response: Response): Response {
-  const newResponse = new Response(response.body, response);
-  newResponse.headers.set('Access-Control-Allow-Origin', '*');
-  newResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  newResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, Authorization');
-  return newResponse;
-}
+// addCorsHeaders moved to shared/http
 
 /**
  * Handle image generation request
@@ -544,27 +541,4 @@ async function handleImageServe(path: string, env: Env): Promise<Response> {
   });
 }
 
-/**
- * Create error response
- */
-function createErrorResponse(
-  message: string,
-  code: string,
-  requestId: string,
-  status: number,
-  details?: Record<string, any>
-): Response {
-  const errorResponse: ErrorResponse = {
-    error: message,
-    error_code: code,
-    request_id: requestId,
-    details,
-  };
-
-  return Response.json(errorResponse, {
-    status,
-    headers: {
-      'X-Request-ID': requestId,
-    },
-  });
-}
+// createErrorResponse moved to shared/http
