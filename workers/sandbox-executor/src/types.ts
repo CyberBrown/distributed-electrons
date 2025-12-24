@@ -1,13 +1,13 @@
 /**
  * Sandbox Executor Worker Types
- * For executing Claude tasks via on-prem runner and AI Gateway
+ * For executing tasks via on-prem runners (Claude and Gemini)
  */
 
 /**
  * Environment bindings for the worker
  */
 export interface Env {
-  // AI Gateway auth token (for SDK mode)
+  // AI Gateway auth token (for logging)
   CF_AIG_TOKEN?: string;
 
   // On-prem Claude runner URL (via Cloudflare Tunnel)
@@ -92,56 +92,6 @@ export interface ExecuteOptions {
 
   // Working directory
   working_dir?: string;
-}
-
-/**
- * Request for SDK-based execution via AI Gateway
- */
-export interface SDKExecuteRequest {
-  // The prompt to send to Claude
-  prompt: string;
-
-  // Optional: Instance ID for multi-tenant scenarios
-  instance_id?: string;
-
-  // Optional: Project ID for tracking
-  project_id?: string;
-
-  // Optional: Execution options
-  options?: SDKExecuteOptions;
-}
-
-/**
- * Options for SDK-based execution via AI Gateway
- */
-export interface SDKExecuteOptions {
-  // Maximum tokens in response (default: 1024)
-  max_tokens?: number;
-
-  // Model to use (default: 'sonnet')
-  model?: string;
-
-  // Custom system prompt
-  system_prompt?: string;
-}
-
-/**
- * Response from SDK-based execution via AI Gateway
- */
-export interface SDKExecuteResponse {
-  success: boolean;
-  request_id: string;
-  timestamp: string;
-  result?: string;
-  metadata?: {
-    execution_time_ms: number;
-    model?: string;
-    usage?: {
-      input_tokens: number;
-      output_tokens: number;
-    };
-    stop_reason?: string | null;
-  };
 }
 
 /**

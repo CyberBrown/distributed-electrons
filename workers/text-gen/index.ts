@@ -8,15 +8,12 @@ import type {
   Env,
   GenerateRequest,
   GenerateResponse,
-  ErrorResponse,
-  InstanceConfig,
   TextResult,
   ModelConfig,
 } from './types';
 import {
   applyPayloadMapping,
   applyResponseMapping,
-  validatePayloadMapping,
 } from '../shared/utils/payload-mapper';
 import {
   fetchModelConfigCached,
@@ -25,8 +22,6 @@ import {
 import {
   addCorsHeaders,
   createErrorResponse,
-  handleCorsPrelight,
-  getRequestId,
 } from '../shared/http';
 import { createRouter, LLMRouter } from './llm-router';
 import { generateWithSparkLocal } from './spark-provider';

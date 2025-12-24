@@ -1,95 +1,26 @@
 /**
  * Sandbox Executor Worker
- * Delegates all CLI execution to on-prem Claude runner via Cloudflare Tunnel.
- * Also supports SDK mode via AI Gateway for lightweight queries.
+ * Delegates all CLI execution to on-prem runners (Claude or Gemini) via Cloudflare Tunnel.
  *
  * Endpoints:
- * - POST /execute - Delegate to on-prem Claude runner
- * - POST /execute/sdk - Execute using Anthropic SDK via AI Gateway
+ * - POST /execute - Delegate to on-prem runner (Claude primary, Gemini fallback)
  * - GET /health - Health check endpoint
  *
- * @version 2.0.0 - Removed CF container/sandbox, runner-only mode
+ * @version 2.1.0 - Runner-only mode with Claude/Gemini fallback
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import type {
   Env,
   ExecuteRequest,
   ErrorResponse,
   HealthResponse,
-  SDKExecuteRequest,
-  SDKExecuteResponse,
 } from './types';
 
 // Note: Sandbox DO was removed in migration v2 - no longer exported
 
-// Default runner URL (via Cloudflare Tunnel)
+// Default runner URLs (via Cloudflare Tunnel)
 const DEFAULT_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
-
-/**
- * OAuth error patterns to detect when Claude auth fails
- */
-const OAUTH_ERROR_PATTERNS = [
-  'invalid_grant',
-  'token expired',
-  'token has expired',
-  'unauthorized',
-  'session expired',
-  '401 unauthorized',
-  'authentication failed',
-  'invalid api key',
-  'please log in',
-  'not authenticated',
-  'oauth credentials',
-  'access token',
-  'refresh token',
-];
-
-/**
- * Check if error output indicates OAuth failure
- */
-function isOAuthError(output: string, exitCode?: number): boolean {
-  const lowerOutput = output.toLowerCase();
-  // Exit code 1 with auth-related error messages
-  if (exitCode === 1 || exitCode === 401) {
-    return OAUTH_ERROR_PATTERNS.some(pattern => lowerOutput.includes(pattern));
-  }
-  return false;
-}
-
-/**
- * Attempt to auto-refresh OAuth credentials
- * Returns true if refresh succeeded, false if human intervention is needed
- */
-async function tryAutoRefreshOAuth(env: Env, requestId: string): Promise<boolean> {
-  try {
-    const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
-
-    console.log(`[OAuth Refresh] Attempting automatic token refresh for request ${requestId}`);
-
-    const response = await fetch(`${configServiceUrl}/oauth/claude/refresh`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Internal-Key': env.INTERNAL_API_KEY || '',
-      },
-    });
-
-    if (response.ok) {
-      console.log(`[OAuth Refresh] Successfully refreshed tokens for request ${requestId}`);
-      return true;
-    }
-
-    const errorData = await response.json().catch(() => ({})) as { error?: string };
-    console.warn(`[OAuth Refresh] Refresh failed: ${response.status} - ${errorData.error || 'Unknown error'}`);
-
-    // 401 means refresh token is invalid - need human intervention
-    return false;
-  } catch (error) {
-    console.error('[OAuth Refresh] Error during refresh attempt:', error);
-    return false;
-  }
-}
+const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini.spark.distributedelectrons.com';
 
 // ============================================================================
 // On-Prem Runner Delegation (Claude & Gemini)
@@ -105,12 +36,6 @@ interface RunnerExecuteResponse {
   exit_code?: number;
   duration_ms: number;
 }
-
-/**
- * AI Gateway configuration
- */
-const AI_GATEWAY_URL =
-  'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/anthropic';
 
 /**
  * Default AI Gateway logging URL (base endpoint without /anthropic suffix)
@@ -204,24 +129,6 @@ function generateTaskSummary(task: string, maxLength = 100): string {
     return firstLine;
   }
   return firstLine.substring(0, maxLength - 3) + '...';
-}
-
-/**
- * Default system prompt for SDK execution
- */
-const DEFAULT_SDK_SYSTEM_PROMPT =
-  'You are a helpful AI assistant. Provide clear, concise, and accurate responses.';
-
-/**
- * Map model shorthand to full model ID
- */
-function getModelId(model?: string): string {
-  const modelMap: Record<string, string> = {
-    opus: 'claude-opus-4-20250514',
-    sonnet: 'claude-sonnet-4-20250514',
-    haiku: 'claude-3-5-haiku-20241022',
-  };
-  return modelMap[model || 'sonnet'] || model || 'claude-sonnet-4-20250514';
 }
 
 /**
@@ -411,156 +318,6 @@ async function delegateToRunner(
 }
 
 /**
- * Handle /execute requests - always delegates to on-prem runner
- */
-async function handleExecute(
-  request: Request,
-  env: Env,
-  requestId: string
-): Promise<Response> {
-  // Get runner URL and secret
-  const runnerUrl = env.CLAUDE_RUNNER_URL || DEFAULT_RUNNER_URL;
-  const runnerSecret = env.RUNNER_SECRET;
-
-  if (!runnerSecret) {
-    return createErrorResponse(
-      'RUNNER_SECRET not configured',
-      'MISSING_RUNNER_SECRET',
-      requestId,
-      500
-    );
-  }
-
-  // Parse request body
-  const body: ExecuteRequest = await request.json();
-
-  // Validate request
-  if (!body.task || body.task.trim() === '') {
-    return createErrorResponse('Task is required', 'INVALID_REQUEST', requestId, 400);
-  }
-
-  console.log(`[EXEC ${requestId}] Delegating to runner: ${runnerUrl}`);
-
-  // Delegate to on-prem runner
-  return delegateToRunner(env, runnerUrl, body.task, body.repo, runnerSecret, requestId, {
-    timeout_ms: body.options?.timeout_ms,
-  });
-}
-
-/**
- * Handle SDK-based execution via AI Gateway
- * Uses base Anthropic SDK with Cloudflare AI Gateway for BYOK
- */
-async function handleSDKExecute(
-  request: Request,
-  env: Env,
-  requestId: string
-): Promise<Response> {
-  const startTime = Date.now();
-
-  try {
-    // Parse request body
-    const body: SDKExecuteRequest = await request.json();
-
-    // Validate request
-    if (!body.prompt || body.prompt.trim() === '') {
-      return createErrorResponse('Prompt is required', 'INVALID_REQUEST', requestId, 400);
-    }
-
-    // Validate AI Gateway token is configured
-    if (!env.CF_AIG_TOKEN) {
-      return createErrorResponse(
-        'CF_AIG_TOKEN not configured',
-        'MISSING_GATEWAY_TOKEN',
-        requestId,
-        500
-      );
-    }
-
-    // Build options
-    const model = getModelId(body.options?.model);
-    const maxTokens = body.options?.max_tokens || 1024;
-    const systemPrompt = body.options?.system_prompt || DEFAULT_SDK_SYSTEM_PROMPT;
-
-    console.log(`[SDK ${requestId}] Executing via AI Gateway (model: ${model})`);
-
-    // Create Anthropic client with AI Gateway + BYOK
-    const anthropic = new Anthropic({
-      apiKey: 'placeholder',
-      baseURL: AI_GATEWAY_URL,
-      defaultHeaders: {
-        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-        'anthropic-version': '2023-06-01',
-      },
-      fetch: async (url, init) => {
-        const headers = new Headers(init?.headers);
-        headers.delete('x-api-key');
-        return fetch(url, { ...init, headers });
-      },
-    });
-
-    // Execute the query
-    const response = await anthropic.messages.create({
-      model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: body.prompt }],
-    });
-
-    const executionTime = Date.now() - startTime;
-
-    // Extract text from response
-    const resultText = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n');
-
-    const inputTokens = response.usage?.input_tokens || 0;
-    const outputTokens = response.usage?.output_tokens || 0;
-
-    const sdkResponse: SDKExecuteResponse = {
-      success: true,
-      request_id: requestId,
-      timestamp: new Date().toISOString(),
-      result: resultText,
-      metadata: {
-        execution_time_ms: executionTime,
-        model,
-        usage: {
-          input_tokens: inputTokens,
-          output_tokens: outputTokens,
-        },
-        stop_reason: response.stop_reason,
-      },
-    };
-
-    return Response.json(sdkResponse, {
-      headers: { 'X-Request-ID': requestId },
-    });
-  } catch (error) {
-    console.error(`[SDK ${requestId}] Execution error:`, error);
-
-    if (error instanceof Anthropic.APIError) {
-      if (error.status === 429) {
-        return createErrorResponse('Rate limit exceeded', 'RATE_LIMITED', requestId, 429);
-      }
-      if (error.status === 401 || error.status === 403) {
-        return createErrorResponse(
-          `Auth error (${error.status}): ${error.message}`,
-          'AUTH_ERROR',
-          requestId,
-          error.status
-        );
-      }
-      return createErrorResponse(error.message, 'API_ERROR', requestId, error.status || 500);
-    }
-
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return createErrorResponse(errorMessage, 'SDK_EXECUTION_ERROR', requestId, 500);
-  }
-}
-
-/**
  * Delegate task execution to on-prem Gemini runner
  * This is the preferred path when GEMINI_RUNNER_URL is configured and executor_type is 'gemini'
  *
@@ -730,65 +487,6 @@ async function delegateToGeminiRunner(
 }
 
 /**
- * Emit OAuth expired event to config-service for webhook notifications
- * Only called when auto-refresh fails and human intervention is needed
- */
-async function emitOAuthExpiredEvent(
-  env: Env,
-  requestId: string,
-  details: Record<string, unknown>
-): Promise<void> {
-  try {
-    // Use CONFIG_SERVICE_URL from env if available
-    const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
-
-    const response = await fetch(`${configServiceUrl}/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tenant_id: 'system', // System-level event
-        action: 'oauth.expired',
-        eventable_type: 'oauth_credentials',
-        eventable_id: 'claude_max',
-        particulars: {
-          request_id: requestId,
-          service: 'sandbox-executor',
-          timestamp: new Date().toISOString(),
-          auto_refresh_failed: true,
-          ...details,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`[OAuth Event] Failed to emit event: ${response.status} ${await response.text()}`);
-    } else {
-      console.log(`[OAuth Event] Successfully emitted oauth.expired event for request ${requestId}`);
-    }
-  } catch (error) {
-    console.error(`[SDK ${requestId}] Execution error:`, error);
-
-    if (error instanceof Anthropic.APIError) {
-      if (error.status === 429) {
-        return createErrorResponse('Rate limit exceeded', 'RATE_LIMITED', requestId, 429);
-      }
-      if (error.status === 401 || error.status === 403) {
-        return createErrorResponse(
-          `Auth error (${error.status}): ${error.message}`,
-          'AUTH_ERROR',
-          requestId,
-          error.status
-        );
-      }
-      return createErrorResponse(error.message, 'API_ERROR', requestId, error.status || 500);
-    }
-
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return createErrorResponse(errorMessage, 'SDK_EXECUTION_ERROR', requestId, 500);
-  }
-}
-
-/**
  * Main worker entry point
  */
 export default {
@@ -811,11 +509,6 @@ export default {
       }
 
       // Route handling
-      if (url.pathname === '/execute/sdk' && request.method === 'POST') {
-        const response = await handleSDKExecute(request, env, requestId);
-        return addCorsHeaders(response);
-      }
-
       if (url.pathname === '/execute' && request.method === 'POST') {
         const body: ExecuteRequest = await request.clone().json();
         const executorType = body.executor_type || 'claude';

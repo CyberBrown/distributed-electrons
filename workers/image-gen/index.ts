@@ -13,7 +13,6 @@ import {
 import {
   applyPayloadMapping,
   applyResponseMapping,
-  validatePayloadMapping,
   type PayloadMapping,
 } from '../shared/utils/payload-mapper';
 import {
@@ -23,15 +22,11 @@ import {
 import {
   addCorsHeaders,
   createErrorResponse,
-  handleCorsPrelight,
-  getRequestId,
 } from '../shared/http';
 import type {
   Env,
   GenerateRequest,
   GenerateResponse,
-  ErrorResponse,
-  InstanceConfig,
   ModelConfig,
 } from './types';
 
