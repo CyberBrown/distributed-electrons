@@ -37,22 +37,11 @@ export interface ProviderHealthState {
  * Priority 1 = first choice, 2 = second choice, etc.
  */
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
-  {
-    id: 'spark-local',
-    name: 'Spark Local (On-Prem)',
-    priority: 1,
-    baseUrl: '', // Set from SPARK_LOCAL_URL env
-    healthStatus: 'healthy',
-    lastHealthCheck: new Date(),
-    errorCount: 0,
-    consecutiveFailures: 0,
-    supportsStreaming: true,
-    models: ['*'], // Accepts any model, proxies to local LLM
-  },
+  // Anthropic first - reliable structured JSON output
   {
     id: 'anthropic',
     name: 'Anthropic',
-    priority: 2,
+    priority: 1,
     baseUrl: 'https://api.anthropic.com',
     healthStatus: 'healthy',
     lastHealthCheck: new Date(),
@@ -61,10 +50,11 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     supportsStreaming: true,
     models: ['claude-*'],
   },
+  // OpenAI second - good JSON support
   {
     id: 'openai',
     name: 'OpenAI',
-    priority: 3,
+    priority: 2,
     baseUrl: 'https://api.openai.com',
     healthStatus: 'healthy',
     lastHealthCheck: new Date(),
@@ -72,6 +62,19 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     consecutiveFailures: 0,
     supportsStreaming: true,
     models: ['gpt-*', 'o1-*', 'chatgpt-*'],
+  },
+  // Spark-local last - Nemotron struggles with structured JSON
+  {
+    id: 'spark-local',
+    name: 'Spark Local (On-Prem)',
+    priority: 3,
+    baseUrl: '', // Set from SPARK_LOCAL_URL env
+    healthStatus: 'healthy',
+    lastHealthCheck: new Date(),
+    errorCount: 0,
+    consecutiveFailures: 0,
+    supportsStreaming: true,
+    models: ['*'], // Accepts any model, proxies to local LLM
   },
 ];
 
