@@ -3,12 +3,14 @@
  * Exports all Cloudflare Workflows for Distributed Electrons
  */
 
-import { CodeExecutionParams, TextGenerationParams, PrimeWorkflowParams } from './types';
+import { CodeExecutionParams, TextGenerationParams, PrimeWorkflowParams, ImageGenerationParams, AudioGenerationParams } from './types';
 
 export { VideoRenderWorkflow } from './VideoRenderWorkflow';
 export { CodeExecutionWorkflow } from './CodeExecutionWorkflow';
 export { TextGenerationWorkflow } from './TextGenerationWorkflow';
 export { PrimeWorkflow } from './PrimeWorkflow';
+export { ImageGenerationWorkflow } from './ImageGenerationWorkflow';
+export { AudioGenerationWorkflow } from './AudioGenerationWorkflow';
 
 // Workflow binding type
 interface Workflow {
@@ -30,6 +32,8 @@ interface Env {
   VIDEO_RENDER_WORKFLOW: Workflow;
   TEXT_GENERATION_WORKFLOW: Workflow;
   PRIME_WORKFLOW: Workflow;
+  IMAGE_GENERATION_WORKFLOW: Workflow;
+  AUDIO_GENERATION_WORKFLOW: Workflow;
   // Auth secret for external trigger requests
   NEXUS_PASSPHRASE?: string;
 }
@@ -45,7 +49,14 @@ export default {
       return Response.json({
         status: 'healthy',
         service: 'de-workflows',
-        workflows: ['prime-workflow', 'video-render-workflow', 'code-execution-workflow', 'text-generation-workflow'],
+        workflows: [
+          'prime-workflow',
+          'video-render-workflow',
+          'code-execution-workflow',
+          'text-generation-workflow',
+          'image-generation-workflow',
+          'audio-generation-workflow',
+        ],
         timestamp: new Date().toISOString(),
       });
     }
@@ -284,6 +295,162 @@ export default {
       }
     }
 
+    // POST /workflows/image-generation - Trigger ImageGenerationWorkflow via HTTP
+    // Wraps image-gen worker with fallback (Ideogram → DALL-E → Stability)
+    if (url.pathname === '/workflows/image-generation' && request.method === 'POST') {
+      try {
+        // Validate passphrase for authentication
+        const passphrase = request.headers.get('X-Passphrase');
+        if (env.NEXUS_PASSPHRASE && passphrase !== env.NEXUS_PASSPHRASE) {
+          return Response.json({ error: 'Invalid passphrase' }, { status: 401 });
+        }
+
+        const body = await request.json() as {
+          id?: string;
+          params: ImageGenerationParams;
+        };
+
+        if (!body.params?.request_id) {
+          return Response.json({ error: 'Missing request_id in params' }, { status: 400 });
+        }
+
+        if (!body.params?.prompt) {
+          return Response.json({ error: 'Missing prompt in params' }, { status: 400 });
+        }
+
+        // Use request_id as workflow instance ID to prevent duplicates
+        const workflowId = body.id || body.params.request_id;
+
+        const instance = await env.IMAGE_GENERATION_WORKFLOW.create({
+          id: workflowId,
+          params: body.params,
+        });
+
+        return Response.json({
+          success: true,
+          workflow_id: instance.id,
+          message: 'ImageGenerationWorkflow triggered',
+        });
+      } catch (error: any) {
+        // Handle duplicate workflow error gracefully
+        if (error.message?.includes('already exists')) {
+          return Response.json({
+            success: false,
+            error: 'Workflow with this ID already exists',
+            code: 'DUPLICATE_WORKFLOW',
+          }, { status: 409 });
+        }
+        return Response.json({
+          success: false,
+          error: error.message || 'Failed to trigger workflow',
+        }, { status: 500 });
+      }
+    }
+
+    // GET /workflows/image-generation/:id - Get workflow status
+    if (url.pathname.startsWith('/workflows/image-generation/') && request.method === 'GET') {
+      try {
+        const workflowId = url.pathname.replace('/workflows/image-generation/', '');
+        if (!workflowId) {
+          return Response.json({ error: 'Missing workflow ID' }, { status: 400 });
+        }
+
+        const instance = await env.IMAGE_GENERATION_WORKFLOW.get(workflowId);
+        const status = await instance.status();
+
+        return Response.json({
+          success: true,
+          workflow_id: workflowId,
+          status: status.status,
+          output: status.output,
+          error: status.error,
+        });
+      } catch (error: any) {
+        return Response.json({
+          success: false,
+          error: error.message || 'Failed to get workflow status',
+        }, { status: 500 });
+      }
+    }
+
+    // POST /workflows/audio-generation - Trigger AudioGenerationWorkflow via HTTP
+    // Wraps audio-gen worker with fallback (ElevenLabs → OpenAI TTS)
+    if (url.pathname === '/workflows/audio-generation' && request.method === 'POST') {
+      try {
+        // Validate passphrase for authentication
+        const passphrase = request.headers.get('X-Passphrase');
+        if (env.NEXUS_PASSPHRASE && passphrase !== env.NEXUS_PASSPHRASE) {
+          return Response.json({ error: 'Invalid passphrase' }, { status: 401 });
+        }
+
+        const body = await request.json() as {
+          id?: string;
+          params: AudioGenerationParams;
+        };
+
+        if (!body.params?.request_id) {
+          return Response.json({ error: 'Missing request_id in params' }, { status: 400 });
+        }
+
+        if (!body.params?.text) {
+          return Response.json({ error: 'Missing text in params' }, { status: 400 });
+        }
+
+        // Use request_id as workflow instance ID to prevent duplicates
+        const workflowId = body.id || body.params.request_id;
+
+        const instance = await env.AUDIO_GENERATION_WORKFLOW.create({
+          id: workflowId,
+          params: body.params,
+        });
+
+        return Response.json({
+          success: true,
+          workflow_id: instance.id,
+          message: 'AudioGenerationWorkflow triggered',
+        });
+      } catch (error: any) {
+        // Handle duplicate workflow error gracefully
+        if (error.message?.includes('already exists')) {
+          return Response.json({
+            success: false,
+            error: 'Workflow with this ID already exists',
+            code: 'DUPLICATE_WORKFLOW',
+          }, { status: 409 });
+        }
+        return Response.json({
+          success: false,
+          error: error.message || 'Failed to trigger workflow',
+        }, { status: 500 });
+      }
+    }
+
+    // GET /workflows/audio-generation/:id - Get workflow status
+    if (url.pathname.startsWith('/workflows/audio-generation/') && request.method === 'GET') {
+      try {
+        const workflowId = url.pathname.replace('/workflows/audio-generation/', '');
+        if (!workflowId) {
+          return Response.json({ error: 'Missing workflow ID' }, { status: 400 });
+        }
+
+        const instance = await env.AUDIO_GENERATION_WORKFLOW.get(workflowId);
+        const status = await instance.status();
+
+        return Response.json({
+          success: true,
+          workflow_id: workflowId,
+          status: status.status,
+          output: status.output,
+          error: status.error,
+        });
+      } catch (error: any) {
+        return Response.json({
+          success: false,
+          error: error.message || 'Failed to get workflow status',
+        }, { status: 500 });
+      }
+    }
+
     return Response.json({
       error: 'Not found',
       available_endpoints: [
@@ -294,6 +461,10 @@ export default {
         'GET /workflows/code-execution/:id',
         'POST /workflows/text-generation',
         'GET /workflows/text-generation/:id',
+        'POST /workflows/image-generation',
+        'GET /workflows/image-generation/:id',
+        'POST /workflows/audio-generation',
+        'GET /workflows/audio-generation/:id',
       ],
     }, { status: 404 });
   },

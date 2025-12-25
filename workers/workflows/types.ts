@@ -407,13 +407,123 @@ export interface NexusResponse {
 }
 
 // ============================================================================
+// Image Generation Workflow Types
+// ============================================================================
+
+/**
+ * Parameters for ImageGenerationWorkflow
+ */
+export interface ImageGenerationParams {
+  /** Unique request identifier */
+  request_id: string;
+
+  /** The prompt describing the image to generate */
+  prompt: string;
+
+  /** Model ID (e.g., 'ideogram-v2', 'dall-e-3') */
+  model_id?: string;
+
+  /** Generation options */
+  options?: {
+    aspect_ratio?: string;
+    style?: string;
+    negative_prompt?: string;
+    seed?: number;
+  };
+
+  /** Optional callback URL for completion notification */
+  callback_url?: string;
+
+  /** Execution timeout in milliseconds (default: 120000 = 2 minutes) */
+  timeout_ms?: number;
+}
+
+/**
+ * Result from image generation
+ */
+export interface ImageGenerationResult {
+  success: boolean;
+  request_id: string;
+  image_url?: string;
+  r2_path?: string;
+  provider?: string;
+  model?: string;
+  error?: string;
+  duration_ms: number;
+}
+
+/**
+ * Environment bindings for ImageGenerationWorkflow
+ */
+export interface ImageGenEnv extends NexusEnv {
+  IMAGE_GEN_URL?: string;
+}
+
+// ============================================================================
+// Audio Generation Workflow Types
+// ============================================================================
+
+/**
+ * Parameters for AudioGenerationWorkflow
+ */
+export interface AudioGenerationParams {
+  /** Unique request identifier */
+  request_id: string;
+
+  /** The text to synthesize into speech */
+  text: string;
+
+  /** Voice ID (provider-specific) */
+  voice_id?: string;
+
+  /** Model ID (e.g., 'eleven_monolingual_v1') */
+  model_id?: string;
+
+  /** Synthesis options */
+  options?: {
+    stability?: number;
+    similarity_boost?: number;
+    style?: number;
+    speed?: number;
+  };
+
+  /** Optional callback URL for completion notification */
+  callback_url?: string;
+
+  /** Execution timeout in milliseconds (default: 60000 = 1 minute) */
+  timeout_ms?: number;
+}
+
+/**
+ * Result from audio generation
+ */
+export interface AudioGenerationResult {
+  success: boolean;
+  request_id: string;
+  audio_url?: string;
+  duration_seconds?: number;
+  provider?: string;
+  voice_id?: string;
+  model_id?: string;
+  error?: string;
+  duration_ms: number;
+}
+
+/**
+ * Environment bindings for AudioGenerationWorkflow
+ */
+export interface AudioGenEnv extends NexusEnv {
+  AUDIO_GEN_URL?: string;
+}
+
+// ============================================================================
 // Prime Workflow Types
 // ============================================================================
 
 /**
  * Task type classification for routing
  */
-export type TaskType = 'code' | 'text' | 'video';
+export type TaskType = 'code' | 'text' | 'video' | 'image' | 'audio';
 
 /**
  * Workflow binding type (for Cloudflare Workflows)
@@ -470,10 +580,10 @@ export interface PrimeWorkflowParams {
   /** Hints from the caller - suggestions only, DE decides */
   hints?: {
     /** Suggested workflow type */
-    workflow?: 'code-execution' | 'text-generation' | 'video-render';
-    /** Suggested provider (e.g., 'claude', 'gemini') */
+    workflow?: 'code-execution' | 'text-generation' | 'video-render' | 'image-generation' | 'audio-generation';
+    /** Suggested provider (e.g., 'claude', 'gemini', 'ideogram', 'elevenlabs') */
     provider?: string;
-    /** Suggested model (e.g., 'claude-3-opus') */
+    /** Suggested model (e.g., 'claude-3-opus', 'ideogram-v2') */
     model?: string;
   };
 
@@ -510,4 +620,6 @@ export interface PrimeEnv extends NexusEnv {
   CODE_EXECUTION_WORKFLOW: Workflow;
   TEXT_GENERATION_WORKFLOW: Workflow;
   VIDEO_RENDER_WORKFLOW: Workflow;
+  IMAGE_GENERATION_WORKFLOW: Workflow;
+  AUDIO_GENERATION_WORKFLOW: Workflow;
 }

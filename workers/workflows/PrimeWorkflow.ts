@@ -225,6 +225,8 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
       '[explain]',
     ];
     const videoIndicators = ['[video]', '[render]', '[animate]'];
+    const imageIndicators = ['[image]', '[generate-image]', '[picture]', '[illustration]'];
+    const audioIndicators = ['[audio]', '[speech]', '[tts]', '[voice]', '[synthesize]'];
 
     if (codeIndicators.some((ind) => titleLower.includes(ind))) {
       console.log('[PrimeWorkflow] Classification: code (title tag)');
@@ -237,6 +239,14 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
     if (videoIndicators.some((ind) => titleLower.includes(ind))) {
       console.log('[PrimeWorkflow] Classification: video (title tag)');
       return 'video';
+    }
+    if (imageIndicators.some((ind) => titleLower.includes(ind))) {
+      console.log('[PrimeWorkflow] Classification: image (title tag)');
+      return 'image';
+    }
+    if (audioIndicators.some((ind) => titleLower.includes(ind))) {
+      console.log('[PrimeWorkflow] Classification: audio (title tag)');
+      return 'audio';
     }
 
     // 3. Content keyword analysis
@@ -276,6 +286,14 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
     if (hints?.workflow === 'video-render') {
       console.log('[PrimeWorkflow] Classification: video (hint)');
       return 'video';
+    }
+    if (hints?.workflow === 'image-generation') {
+      console.log('[PrimeWorkflow] Classification: image (hint)');
+      return 'image';
+    }
+    if (hints?.workflow === 'audio-generation') {
+      console.log('[PrimeWorkflow] Classification: audio (hint)');
+      return 'audio';
     }
 
     // 5. Default to text (safer, cheaper, faster)
@@ -332,6 +350,30 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
             request_id: params.task_id,
             timeline: params.context?.timeline,
             output: params.context?.output,
+          },
+        };
+        break;
+
+      case 'image':
+        endpoint = '/workflows/image-generation';
+        subParams = {
+          params: {
+            request_id: params.task_id,
+            prompt: `${params.title}\n\n${params.description}`,
+            model_id: params.hints?.model,
+            callback_url: params.callback_url,
+          },
+        };
+        break;
+
+      case 'audio':
+        endpoint = '/workflows/audio-generation';
+        subParams = {
+          params: {
+            request_id: params.task_id,
+            text: params.description || params.title,
+            voice_id: params.hints?.model, // Can use hints.model for voice selection
+            callback_url: params.callback_url,
           },
         };
         break;
