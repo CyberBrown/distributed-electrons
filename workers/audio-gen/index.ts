@@ -1,6 +1,10 @@
 /**
  * Audio Generation Worker
- * Synthesizes speech from text using ElevenLabs API
+ * Synthesizes speech from text using ElevenLabs or OpenAI TTS
+ *
+ * Provider waterfall:
+ * 1. ElevenLabs (if API key configured)
+ * 2. OpenAI TTS via Cloudflare AI Gateway (fallback)
  */
 
 import type {
@@ -15,6 +19,9 @@ import {
   handleCorsPrelight,
   fetchWithRetry,
 } from '../shared/http';
+
+// AI Gateway URL for OpenAI TTS
+const AI_GATEWAY_OPENAI = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway/openai';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -119,28 +126,45 @@ async function handleSynthesize(
       );
     }
 
-    // Get API key
-    const apiKey = env.ELEVENLABS_API_KEY;
-    if (!apiKey) {
+    // Generate audio - try ElevenLabs first, then OpenAI TTS via AI Gateway
+    let result: AudioResult;
+    let provider: string;
+
+    const voiceId = body.voice_id || env.DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'; // Rachel
+    const modelId = body.model_id || env.DEFAULT_MODEL_ID || 'eleven_monolingual_v1';
+
+    if (env.ELEVENLABS_API_KEY) {
+      // Try ElevenLabs first
+      try {
+        result = await generateWithElevenLabs(
+          body.text,
+          voiceId,
+          modelId,
+          body.options || {},
+          env.ELEVENLABS_API_KEY
+        );
+        provider = 'elevenlabs';
+      } catch (elevenLabsError) {
+        console.warn('ElevenLabs failed, trying OpenAI TTS:', elevenLabsError);
+        // Fallback to OpenAI TTS
+        if (!env.CF_AIG_TOKEN) {
+          throw elevenLabsError; // Re-throw if no fallback available
+        }
+        result = await generateWithOpenAI(body.text, body.voice_id, env.CF_AIG_TOKEN);
+        provider = 'openai';
+      }
+    } else if (env.CF_AIG_TOKEN) {
+      // Use OpenAI TTS via AI Gateway
+      result = await generateWithOpenAI(body.text, body.voice_id, env.CF_AIG_TOKEN);
+      provider = 'openai';
+    } else {
       return createErrorResponse(
-        'ElevenLabs API key not configured',
+        'Missing API key',
         'MISSING_API_KEY',
         requestId,
         500
       );
     }
-
-    // Generate audio
-    const voiceId = body.voice_id || env.DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'; // Rachel
-    const modelId = body.model_id || env.DEFAULT_MODEL_ID || 'eleven_monolingual_v1';
-
-    const result = await generateWithElevenLabs(
-      body.text,
-      voiceId,
-      modelId,
-      body.options || {},
-      apiKey
-    );
 
     // Store audio in R2
     const audioKey = `audio/${requestId}.mp3`;
@@ -166,9 +190,9 @@ async function handleSynthesize(
       audio_url: audioUrl,
       duration_seconds: result.duration_seconds,
       metadata: {
-        provider: 'elevenlabs',
-        voice_id: voiceId,
-        model_id: modelId,
+        provider,
+        voice_id: result.voice_id,
+        model_id: result.model_id,
         character_count: body.text.length,
         generation_time_ms: generationTime,
       },
@@ -255,6 +279,54 @@ async function generateWithElevenLabs(
     provider: 'elevenlabs',
     voice_id: voiceId,
     model_id: modelId,
+    character_count: text.length,
+  };
+}
+
+/**
+ * Generate audio using OpenAI TTS via Cloudflare AI Gateway
+ */
+async function generateWithOpenAI(
+  text: string,
+  voiceId: string | undefined,
+  aigToken: string
+): Promise<AudioResult> {
+  // Map voice IDs or use defaults
+  // OpenAI voices: alloy, echo, fable, onyx, nova, shimmer
+  const openaiVoice = voiceId?.toLowerCase() || 'nova';
+  const validVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+  const voice = validVoices.includes(openaiVoice) ? openaiVoice : 'nova';
+
+  const response = await fetch(`${AI_GATEWAY_OPENAI}/v1/audio/speech`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'cf-aig-authorization': `Bearer ${aigToken}`,
+    },
+    body: JSON.stringify({
+      model: 'tts-1',
+      input: text,
+      voice,
+      response_format: 'mp3',
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OpenAI TTS error (${response.status}): ${error}`);
+  }
+
+  const audioData = await response.arrayBuffer();
+
+  // Estimate duration (rough: ~150 words per minute, ~5 chars per word)
+  const estimatedDuration = (text.length / 5 / 150) * 60;
+
+  return {
+    audio_data: audioData,
+    duration_seconds: estimatedDuration,
+    provider: 'openai',
+    voice_id: voice,
+    model_id: 'tts-1',
     character_count: text.length,
   };
 }

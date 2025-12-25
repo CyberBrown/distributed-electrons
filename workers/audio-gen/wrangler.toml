@@ -25,7 +25,8 @@ DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 DEFAULT_MODEL_ID = "eleven_monolingual_v1"
 
 # Secrets (set with: wrangler secret put <NAME>)
-# - ELEVENLABS_API_KEY
+# - ELEVENLABS_API_KEY (optional - if not set, uses OpenAI TTS)
+# - CF_AIG_TOKEN (Cloudflare AI Gateway token - routes OpenAI TTS through Gateway)
 
 # Custom Domain
 [[routes]]

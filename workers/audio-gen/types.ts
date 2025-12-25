@@ -51,6 +51,8 @@ export interface Env {
 
   // API Keys (from secrets)
   ELEVENLABS_API_KEY?: string;
+  // Cloudflare AI Gateway token - routes OpenAI TTS calls through Gateway
+  CF_AIG_TOKEN?: string;
 }
 
 export interface InstanceConfig {
