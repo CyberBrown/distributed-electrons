@@ -132,6 +132,32 @@ function generateTaskSummary(task: string, maxLength = 100): string {
 }
 
 /**
+ * Deployment reminder to prepend to all tasks
+ * Ensures code changes are deployed before marking tasks complete
+ */
+const DEPLOYMENT_REMINDER = `
+IMPORTANT - DEPLOYMENT REQUIRED:
+After committing changes, you MUST deploy before marking the task complete:
+- For Workers projects: run \`wrangler deploy\`
+- For Pages projects: run \`wrangler pages deploy dist/\` or \`bun run deploy\`
+- Verify the deployment succeeded by checking the live URL
+- If deployment fails, debug and retry
+
+A task is NOT complete until the changes are live and verified.
+
+---
+
+`;
+
+/**
+ * Build the full prompt with deployment instructions
+ * Prepends deployment reminder to ensure tasks include deployment steps
+ */
+function buildPromptWithDeploymentReminder(task: string): string {
+  return DEPLOYMENT_REMINDER + task;
+}
+
+/**
  * Delegate task execution to on-prem Claude runner
  *
  * @param env - Environment bindings
@@ -192,7 +218,7 @@ async function delegateToRunner(
       method: 'POST',
       headers,
       body: JSON.stringify({
-        prompt: task,
+        prompt: buildPromptWithDeploymentReminder(task),
         repo_url: repoUrl,
         timeout_ms: options?.timeout_ms || 300000, // 5 minutes default
         allowed_tools: options?.allowed_tools,
@@ -366,7 +392,7 @@ async function delegateToGeminiRunner(
         'X-Request-ID': requestId,
       },
       body: JSON.stringify({
-        prompt: task,
+        prompt: buildPromptWithDeploymentReminder(task),
         repo_url: repoUrl,
         timeout_ms: options?.timeout_ms || 300000, // 5 minutes default
         model: options?.model,
