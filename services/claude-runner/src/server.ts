@@ -24,6 +24,24 @@ const REPOS_DIR = '/repos';
 const NTFY_TOPIC = process.env.NTFY_TOPIC || 'nexus-oauth-expired';
 const NTFY_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
 
+/**
+ * Deployment reminder that gets prepended to all task prompts.
+ * Ensures tasks are not marked complete until code is deployed and verified.
+ */
+const DEPLOYMENT_REMINDER = `
+IMPORTANT - DEPLOYMENT REQUIRED:
+After committing changes, you MUST deploy before marking the task complete:
+- For Workers projects: run \`wrangler deploy\`
+- For Pages projects: run \`wrangler pages deploy dist/\` or \`bun run deploy\`
+- Verify the deployment succeeded by checking the live URL
+- If deployment fails, debug and retry
+
+A task is NOT complete until the changes are live and verified.
+
+---
+
+`;
+
 // Auth failure tracking
 interface AuthFailureState {
   lastFailureTime: string | null;
@@ -336,6 +354,9 @@ async function executeClaude(
   maxTurns?: number
 ): Promise<{ output: string; exitCode: number }> {
   return new Promise((resolve) => {
+    // Prepend deployment reminder to ensure tasks include deployment steps
+    const fullPrompt = DEPLOYMENT_REMINDER + prompt;
+
     // Build command parts
     // --dangerously-skip-permissions bypasses all permission checks (like Gemini's --yolo)
     const cmdParts = ['claude', '-p', '--dangerously-skip-permissions', '--output-format', 'text'];
@@ -349,7 +370,7 @@ async function executeClaude(
     }
 
     // Escape prompt for shell (replace single quotes)
-    const escapedPrompt = prompt.replace(/'/g, "'\\''");
+    const escapedPrompt = fullPrompt.replace(/'/g, "'\\''");
     cmdParts.push(`'${escapedPrompt}'`);
 
     // Redirect stderr to stdout and close stdin
