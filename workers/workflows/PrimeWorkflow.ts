@@ -30,8 +30,7 @@ import type {
   PrimeEnv,
 } from './types';
 
-// Default DE Workflows URL (self-reference for HTTP-based sub-workflow triggering)
-const DEFAULT_DE_WORKFLOWS_URL = 'https://de-workflows.solamp.workers.dev';
+// Workflow bindings are now used directly instead of HTTP fetch
 
 interface ValidationResult {
   valid: boolean;
@@ -303,22 +302,24 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
 
   /**
    * Route to the appropriate sub-workflow and wait for completion
+   * Uses workflow bindings directly instead of HTTP fetch
    */
   private async routeToSubWorkflow(
     taskType: TaskType,
     params: PrimeWorkflowParams
   ): Promise<SubWorkflowResult> {
-    const workflowUrl =
-      this.env.DE_WORKFLOWS_URL || DEFAULT_DE_WORKFLOWS_URL;
     const startTime = Date.now();
+    const workflowId = `prime-${params.task_id}-${Date.now()}`;
 
-    let endpoint: string;
-    let subParams: Record<string, unknown>;
+    console.log(`[PrimeWorkflow] Triggering ${taskType} sub-workflow via binding`);
+
+    // Use workflow bindings directly instead of HTTP
+    let instance: { id: string; status: () => Promise<{ status: string; output?: unknown; error?: string }> };
 
     switch (taskType) {
       case 'code':
-        endpoint = '/workflows/code-execution';
-        subParams = {
+        instance = await this.env.CODE_EXECUTION_WORKFLOW.create({
+          id: workflowId,
           params: {
             task_id: params.task_id,
             prompt: `${params.title}\n\n${params.description}`,
@@ -327,12 +328,12 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
               params.hints?.provider === 'gemini' ? 'gemini' : 'claude',
             timeout_ms: params.timeout_ms,
           },
-        };
+        });
         break;
 
       case 'text':
-        endpoint = '/workflows/text-generation';
-        subParams = {
+        instance = await this.env.TEXT_GENERATION_WORKFLOW.create({
+          id: workflowId,
           params: {
             request_id: params.task_id,
             prompt: `${params.title}\n\n${params.description}`,
@@ -340,83 +341,56 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
             max_tokens: 4096,
             temperature: 0.7,
           },
-        };
+        });
         break;
 
       case 'video':
-        endpoint = '/workflows/video-render';
-        subParams = {
+        instance = await this.env.VIDEO_RENDER_WORKFLOW.create({
+          id: workflowId,
           params: {
             request_id: params.task_id,
             timeline: params.context?.timeline,
             output: params.context?.output,
           },
-        };
+        });
         break;
 
       case 'image':
-        endpoint = '/workflows/image-generation';
-        subParams = {
+        instance = await this.env.IMAGE_GENERATION_WORKFLOW.create({
+          id: workflowId,
           params: {
             request_id: params.task_id,
             prompt: `${params.title}\n\n${params.description}`,
             model_id: params.hints?.model,
             callback_url: params.callback_url,
           },
-        };
+        });
         break;
 
       case 'audio':
-        endpoint = '/workflows/audio-generation';
-        subParams = {
+        instance = await this.env.AUDIO_GENERATION_WORKFLOW.create({
+          id: workflowId,
           params: {
             request_id: params.task_id,
             text: params.description || params.title,
-            voice_id: params.hints?.model, // Can use hints.model for voice selection
+            voice_id: params.hints?.model,
             callback_url: params.callback_url,
           },
-        };
+        });
         break;
 
       default:
         throw new Error(`Unknown task type: ${taskType}`);
     }
 
-    console.log(`[PrimeWorkflow] Triggering sub-workflow at ${endpoint}`);
+    console.log(`[PrimeWorkflow] Sub-workflow started: ${instance.id}`);
 
-    // Trigger sub-workflow via HTTP
-    const response = await fetch(`${workflowUrl}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Passphrase': this.env.NEXUS_PASSPHRASE || '',
-      },
-      body: JSON.stringify(subParams),
-    });
-
-    const triggerResult = (await response.json()) as {
-      success: boolean;
-      workflow_id?: string;
-      error?: string;
-    };
-
-    if (!triggerResult.success) {
-      throw new Error(triggerResult.error || 'Sub-workflow failed to start');
-    }
-
-    const subWorkflowId = triggerResult.workflow_id;
-    console.log(`[PrimeWorkflow] Sub-workflow started: ${subWorkflowId}`);
-
-    // Poll for completion
-    const completionResult = await this.pollForCompletion(
-      workflowUrl,
-      endpoint,
-      subWorkflowId!
-    );
+    // Poll for completion using workflow binding
+    const completionResult = await this.pollForCompletion(instance);
 
     return {
       success: completionResult.success,
-      workflow_id: subWorkflowId,
+      workflow_id: instance.id,
       output: completionResult.output,
       text: completionResult.text,
       executor: completionResult.executor,
@@ -427,12 +401,10 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
   }
 
   /**
-   * Poll sub-workflow for completion
+   * Poll sub-workflow for completion using workflow binding
    */
   private async pollForCompletion(
-    baseUrl: string,
-    endpoint: string,
-    workflowId: string
+    instance: { id: string; status: () => Promise<{ status: string; output?: unknown; error?: string }> }
   ): Promise<SubWorkflowResult> {
     const maxAttempts = 60; // 5 minutes at 5-second intervals
     const pollInterval = 5000;
@@ -441,40 +413,37 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
       await this.sleep(pollInterval);
 
       try {
-        const response = await fetch(`${baseUrl}${endpoint}/${workflowId}`);
-        const status = (await response.json()) as {
-          success?: boolean;
-          status?: string;
-          output?: {
-            success?: boolean;
-            output?: string;
-            text?: string;
-            executor?: string;
-            provider?: string;
-            error?: string;
-          };
-          error?: string;
-        };
+        const status = await instance.status();
 
         console.log(
           `[PrimeWorkflow] Poll attempt ${attempt + 1}: status=${status.status}`
         );
 
         if (status.status === 'complete') {
+          const output = status.output as {
+            success?: boolean;
+            output?: string;
+            text?: string;
+            executor?: string;
+            provider?: string;
+            error?: string;
+          } | undefined;
+
           return {
-            success: status.output?.success ?? true,
-            output: status.output?.output,
-            text: status.output?.text,
-            executor: status.output?.executor,
-            provider: status.output?.provider,
-            error: status.output?.error,
+            success: output?.success ?? true,
+            output: output?.output,
+            text: output?.text,
+            executor: output?.executor,
+            provider: output?.provider,
+            error: output?.error,
           };
         }
 
         if (status.status === 'errored') {
+          const output = status.output as { error?: string } | undefined;
           return {
             success: false,
-            error: status.error || status.output?.error || 'Sub-workflow errored',
+            error: status.error || output?.error || 'Sub-workflow errored',
           };
         }
 

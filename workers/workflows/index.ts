@@ -3,7 +3,7 @@
  * Exports all Cloudflare Workflows for Distributed Electrons
  */
 
-import { CodeExecutionParams, TextGenerationParams, PrimeWorkflowParams, ImageGenerationParams, AudioGenerationParams } from './types';
+import { PrimeWorkflowParams } from './types';
 
 export { VideoRenderWorkflow } from './VideoRenderWorkflow';
 export { CodeExecutionWorkflow } from './CodeExecutionWorkflow';
@@ -142,53 +142,14 @@ export default {
       }
     }
 
-    // POST /workflows/code-execution - Trigger CodeExecutionWorkflow via HTTP
-    // This endpoint allows external workers (like Nexus) to trigger workflows
-    // since cross-worker workflow bindings are not supported by CF Workflows
+    // POST /workflows/code-execution - LOCKED DOWN
+    // Direct workflow access is disabled. Use POST /execute instead.
+    // PrimeWorkflow now uses workflow bindings directly.
     if (url.pathname === '/workflows/code-execution' && request.method === 'POST') {
-      try {
-        // Validate passphrase for authentication
-        const passphrase = request.headers.get('X-Passphrase');
-        if (env.NEXUS_PASSPHRASE && passphrase !== env.NEXUS_PASSPHRASE) {
-          return Response.json({ error: 'Invalid passphrase' }, { status: 401 });
-        }
-
-        const body = await request.json() as {
-          id?: string;
-          params: CodeExecutionParams;
-        };
-
-        if (!body.params?.task_id) {
-          return Response.json({ error: 'Missing task_id in params' }, { status: 400 });
-        }
-
-        // Use task_id as workflow instance ID to prevent duplicates
-        const workflowId = body.id || body.params.task_id;
-
-        const instance = await env.CODE_EXECUTION_WORKFLOW.create({
-          id: workflowId,
-          params: body.params,
-        });
-
-        return Response.json({
-          success: true,
-          workflow_id: instance.id,
-          message: 'CodeExecutionWorkflow triggered',
-        });
-      } catch (error: any) {
-        // Handle duplicate workflow error gracefully
-        if (error.message?.includes('already exists')) {
-          return Response.json({
-            success: false,
-            error: 'Workflow with this ID already exists',
-            code: 'DUPLICATE_WORKFLOW',
-          }, { status: 409 });
-        }
-        return Response.json({
-          success: false,
-          error: error.message || 'Failed to trigger workflow',
-        }, { status: 500 });
-      }
+      return Response.json({
+        error: 'Direct workflow access disabled. Use POST /execute instead.',
+        code: 'USE_EXECUTE_ENDPOINT',
+      }, { status: 403 });
     }
 
     // GET /workflows/code-execution/:id - Get workflow status
@@ -217,56 +178,14 @@ export default {
       }
     }
 
-    // POST /workflows/text-generation - Trigger TextGenerationWorkflow via HTTP
-    // Routes text-only tasks through the waterfall: runners → local vLLM → API providers
+    // POST /workflows/text-generation - LOCKED DOWN
+    // Direct workflow access is disabled. Use POST /execute instead.
+    // PrimeWorkflow now uses workflow bindings directly.
     if (url.pathname === '/workflows/text-generation' && request.method === 'POST') {
-      try {
-        // Validate passphrase for authentication
-        const passphrase = request.headers.get('X-Passphrase');
-        if (env.NEXUS_PASSPHRASE && passphrase !== env.NEXUS_PASSPHRASE) {
-          return Response.json({ error: 'Invalid passphrase' }, { status: 401 });
-        }
-
-        const body = await request.json() as {
-          id?: string;
-          params: TextGenerationParams;
-        };
-
-        if (!body.params?.request_id) {
-          return Response.json({ error: 'Missing request_id in params' }, { status: 400 });
-        }
-
-        if (!body.params?.prompt) {
-          return Response.json({ error: 'Missing prompt in params' }, { status: 400 });
-        }
-
-        // Use request_id as workflow instance ID to prevent duplicates
-        const workflowId = body.id || body.params.request_id;
-
-        const instance = await env.TEXT_GENERATION_WORKFLOW.create({
-          id: workflowId,
-          params: body.params,
-        });
-
-        return Response.json({
-          success: true,
-          workflow_id: instance.id,
-          message: 'TextGenerationWorkflow triggered',
-        });
-      } catch (error: any) {
-        // Handle duplicate workflow error gracefully
-        if (error.message?.includes('already exists')) {
-          return Response.json({
-            success: false,
-            error: 'Workflow with this ID already exists',
-            code: 'DUPLICATE_WORKFLOW',
-          }, { status: 409 });
-        }
-        return Response.json({
-          success: false,
-          error: error.message || 'Failed to trigger workflow',
-        }, { status: 500 });
-      }
+      return Response.json({
+        error: 'Direct workflow access disabled. Use POST /execute instead.',
+        code: 'USE_EXECUTE_ENDPOINT',
+      }, { status: 403 });
     }
 
     // GET /workflows/text-generation/:id - Get workflow status
@@ -295,56 +214,14 @@ export default {
       }
     }
 
-    // POST /workflows/image-generation - Trigger ImageGenerationWorkflow via HTTP
-    // Wraps image-gen worker with fallback (Ideogram → DALL-E → Stability)
+    // POST /workflows/image-generation - LOCKED DOWN
+    // Direct workflow access is disabled. Use POST /execute instead.
+    // PrimeWorkflow now uses workflow bindings directly.
     if (url.pathname === '/workflows/image-generation' && request.method === 'POST') {
-      try {
-        // Validate passphrase for authentication
-        const passphrase = request.headers.get('X-Passphrase');
-        if (env.NEXUS_PASSPHRASE && passphrase !== env.NEXUS_PASSPHRASE) {
-          return Response.json({ error: 'Invalid passphrase' }, { status: 401 });
-        }
-
-        const body = await request.json() as {
-          id?: string;
-          params: ImageGenerationParams;
-        };
-
-        if (!body.params?.request_id) {
-          return Response.json({ error: 'Missing request_id in params' }, { status: 400 });
-        }
-
-        if (!body.params?.prompt) {
-          return Response.json({ error: 'Missing prompt in params' }, { status: 400 });
-        }
-
-        // Use request_id as workflow instance ID to prevent duplicates
-        const workflowId = body.id || body.params.request_id;
-
-        const instance = await env.IMAGE_GENERATION_WORKFLOW.create({
-          id: workflowId,
-          params: body.params,
-        });
-
-        return Response.json({
-          success: true,
-          workflow_id: instance.id,
-          message: 'ImageGenerationWorkflow triggered',
-        });
-      } catch (error: any) {
-        // Handle duplicate workflow error gracefully
-        if (error.message?.includes('already exists')) {
-          return Response.json({
-            success: false,
-            error: 'Workflow with this ID already exists',
-            code: 'DUPLICATE_WORKFLOW',
-          }, { status: 409 });
-        }
-        return Response.json({
-          success: false,
-          error: error.message || 'Failed to trigger workflow',
-        }, { status: 500 });
-      }
+      return Response.json({
+        error: 'Direct workflow access disabled. Use POST /execute instead.',
+        code: 'USE_EXECUTE_ENDPOINT',
+      }, { status: 403 });
     }
 
     // GET /workflows/image-generation/:id - Get workflow status
@@ -373,56 +250,14 @@ export default {
       }
     }
 
-    // POST /workflows/audio-generation - Trigger AudioGenerationWorkflow via HTTP
-    // Wraps audio-gen worker with fallback (ElevenLabs → OpenAI TTS)
+    // POST /workflows/audio-generation - LOCKED DOWN
+    // Direct workflow access is disabled. Use POST /execute instead.
+    // PrimeWorkflow now uses workflow bindings directly.
     if (url.pathname === '/workflows/audio-generation' && request.method === 'POST') {
-      try {
-        // Validate passphrase for authentication
-        const passphrase = request.headers.get('X-Passphrase');
-        if (env.NEXUS_PASSPHRASE && passphrase !== env.NEXUS_PASSPHRASE) {
-          return Response.json({ error: 'Invalid passphrase' }, { status: 401 });
-        }
-
-        const body = await request.json() as {
-          id?: string;
-          params: AudioGenerationParams;
-        };
-
-        if (!body.params?.request_id) {
-          return Response.json({ error: 'Missing request_id in params' }, { status: 400 });
-        }
-
-        if (!body.params?.text) {
-          return Response.json({ error: 'Missing text in params' }, { status: 400 });
-        }
-
-        // Use request_id as workflow instance ID to prevent duplicates
-        const workflowId = body.id || body.params.request_id;
-
-        const instance = await env.AUDIO_GENERATION_WORKFLOW.create({
-          id: workflowId,
-          params: body.params,
-        });
-
-        return Response.json({
-          success: true,
-          workflow_id: instance.id,
-          message: 'AudioGenerationWorkflow triggered',
-        });
-      } catch (error: any) {
-        // Handle duplicate workflow error gracefully
-        if (error.message?.includes('already exists')) {
-          return Response.json({
-            success: false,
-            error: 'Workflow with this ID already exists',
-            code: 'DUPLICATE_WORKFLOW',
-          }, { status: 409 });
-        }
-        return Response.json({
-          success: false,
-          error: error.message || 'Failed to trigger workflow',
-        }, { status: 500 });
-      }
+      return Response.json({
+        error: 'Direct workflow access disabled. Use POST /execute instead.',
+        code: 'USE_EXECUTE_ENDPOINT',
+      }, { status: 403 });
     }
 
     // GET /workflows/audio-generation/:id - Get workflow status
@@ -455,16 +290,12 @@ export default {
       error: 'Not found',
       available_endpoints: [
         'GET /health',
-        'POST /execute',
+        'POST /execute (single entry point - triggers PrimeWorkflow)',
         'GET /status/:id',
-        'POST /workflows/code-execution',
-        'GET /workflows/code-execution/:id',
-        'POST /workflows/text-generation',
-        'GET /workflows/text-generation/:id',
-        'POST /workflows/image-generation',
-        'GET /workflows/image-generation/:id',
-        'POST /workflows/audio-generation',
-        'GET /workflows/audio-generation/:id',
+        'GET /workflows/code-execution/:id (status only)',
+        'GET /workflows/text-generation/:id (status only)',
+        'GET /workflows/image-generation/:id (status only)',
+        'GET /workflows/audio-generation/:id (status only)',
       ],
     }, { status: 404 });
   },
