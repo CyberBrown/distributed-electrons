@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
     gnupg \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Use existing 'node' user (UID 1000) for non-root execution

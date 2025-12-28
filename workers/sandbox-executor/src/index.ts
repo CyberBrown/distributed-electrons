@@ -20,7 +20,7 @@ import type {
 
 // Default runner URLs (via Cloudflare Tunnel)
 const DEFAULT_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
-const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini.spark.distributedelectrons.com';
+const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini-runner.shiftaltcreate.com';
 
 // ============================================================================
 // On-Prem Runner Delegation (Claude & Gemini)

@@ -28,7 +28,7 @@ import type {
 // Default URLs
 const DEFAULT_SPARK_VLLM_URL = 'https://vllm.shiftaltcreate.com';
 const DEFAULT_CLAUDE_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
-const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini.spark.distributedelectrons.com';
+const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini-runner.shiftaltcreate.com';
 
 // AI Gateway URLs - all API calls route through Cloudflare AI Gateway
 const AI_GATEWAY_BASE = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway';
