@@ -465,6 +465,23 @@ app.post('/execute', authenticate, async (req: Request, res: Response) => {
       duration_ms: Date.now() - startTime,
     };
 
+    // If execution failed, extract error message from output
+    if (result.exitCode !== 0) {
+      // Look for API error patterns in the output
+      const apiErrorMatch = result.output.match(/\[API Error: ([^\]]+)\]/);
+      const quotaErrorMatch = result.output.match(/exhausted your capacity.*reset after (\d+h\d+m)/i);
+
+      if (quotaErrorMatch) {
+        response.error = `Gemini API quota exhausted - resets in ${quotaErrorMatch[1]}`;
+      } else if (apiErrorMatch) {
+        response.error = `Gemini API error: ${apiErrorMatch[1]}`;
+      } else {
+        // Use first line of output as error, or generic message
+        const firstLine = result.output.split('\n').find(l => l.trim()) || 'Execution failed';
+        response.error = firstLine.slice(0, 200);
+      }
+    }
+
     // Check if it was an auth error using pattern detection
     if (detectAuthError(result.output)) {
       response.success = false;
