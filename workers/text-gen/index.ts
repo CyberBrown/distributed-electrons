@@ -29,6 +29,12 @@ import { createRouter, LLMRouter } from './llm-router';
 import { generateWithSparkLocal } from './spark-provider';
 // Phase 2 Router
 import { createRouter as createRouterV2, type RouterRequest, type RouterEnv } from './src/lib/router';
+// JSON QA Validation
+import {
+  withJsonQA,
+  isJsonValidationError,
+  type QAResult,
+} from './src/utils';
 
 /**
  * Infer the provider from model name when no explicit prefix is given
@@ -340,15 +346,86 @@ async function handleGenerate(
     // Calculate generation time
     const generationTime = Date.now() - startTime;
 
+    // Apply JSON QA validation if requested
+    let finalText = result.text;
+    let jsonQaResult: QAResult | undefined;
+
+    if (body.expect_json) {
+      // Create a generator function that re-prompts the LLM for repairs
+      const regenerateFn = async (prompt: string): Promise<string> => {
+        // For repairs, we always use the same provider/model that generated the original response
+        if (body.model_id) {
+          const configServiceUrl = env.CONFIG_SERVICE_URL || 'https://api.distributedelectrons.com';
+          const modelConfig = await fetchModelConfigCached(body.model_id, configServiceUrl);
+          if (modelConfig) {
+            const provider = modelConfig.provider_id;
+            const apiKey = instanceConfig.api_keys[provider] || getEnvApiKey(provider, env);
+            if (apiKey) {
+              const repairResult = await generateWithModelConfig(
+                modelConfig,
+                prompt,
+                body.options || {},
+                apiKey
+              );
+              return repairResult.text;
+            }
+          }
+        }
+        // Fallback: use the router
+        const router = createRouterWithGenerators(env);
+        const model = stripProviderPrefix(body.model || '') || getDefaultModel(env.DEFAULT_PROVIDER || 'openai');
+        const routerResult = await router.route(model, prompt, body.options || {}, {});
+        return routerResult.text;
+      };
+
+      try {
+        jsonQaResult = await withJsonQA(
+          // First call uses the already-generated text
+          async (prompt) => {
+            if (prompt === body.prompt) {
+              return result.text;
+            }
+            // Subsequent calls use the repair function
+            return regenerateFn(prompt);
+          },
+          body.prompt,
+          {
+            expectJson: true,
+            maxRetries: body.json_max_retries ?? 2,
+          }
+        );
+        finalText = jsonQaResult.response;
+      } catch (qaError) {
+        if (isJsonValidationError(qaError)) {
+          console.error(`[JSON QA] Validation failed after ${qaError.attempts} attempts:`, qaError.lastParseError);
+          return createErrorResponse(
+            `JSON validation failed after ${qaError.attempts} attempts: ${qaError.lastParseError}`,
+            'JSON_VALIDATION_FAILED',
+            requestId,
+            422,
+            qaError.toErrorObject().details as Record<string, any>
+          );
+        }
+        throw qaError;
+      }
+    }
+
     // Return success response
     const response: GenerateResponse = {
       success: true,
-      text: result.text,
+      text: finalText,
       metadata: {
         provider: result.provider,
         model: result.model,
         tokens_used: result.tokens_used,
         generation_time_ms: generationTime,
+        ...(jsonQaResult && {
+          json_qa: {
+            validated: jsonQaResult.validated,
+            attempts: jsonQaResult.attempts,
+            repaired: jsonQaResult.repaired,
+          },
+        }),
       },
       request_id: requestId,
       timestamp: new Date().toISOString(),

@@ -8,6 +8,10 @@ export interface GenerateRequest {
   model_id?: string; // Model ID for dynamic config lookup from Config Service
   instance_id?: string;
   project_id?: string;
+  /** When true, validates response as JSON and retries with repair prompt if invalid */
+  expect_json?: boolean;
+  /** Maximum JSON validation retry attempts (default: 2) */
+  json_max_retries?: number;
   options?: {
     max_tokens?: number;
     temperature?: number;
@@ -25,6 +29,12 @@ export interface GenerateResponse {
     model: string;
     tokens_used: number;
     generation_time_ms: number;
+    /** JSON QA validation info (when expect_json was used) */
+    json_qa?: {
+      validated: boolean;
+      attempts: number;
+      repaired: boolean;
+    };
   };
   request_id: string;
   timestamp: string;
