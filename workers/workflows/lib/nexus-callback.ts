@@ -26,6 +26,48 @@ export type { NexusEnv, NexusExecutionResult };
 /** Maximum retry attempts before quarantine */
 const MAX_RETRIES = 5;
 
+/**
+ * Failure indicators that suggest the AI reported success but didn't actually complete the task.
+ * These phrases in the output indicate the AI couldn't find resources, files, or complete the work.
+ */
+const FAILURE_INDICATORS = [
+  "couldn't find",
+  "could not find",
+  "doesn't have",
+  "does not have",
+  "not found",
+  "failed to",
+  "error:",
+  "unable to",
+  "no such file",
+  "doesn't exist",
+  "does not exist",
+  "i can't",
+  "i cannot",
+  "i'm unable",
+  "i am unable",
+  "no matching",
+  "nothing found",
+  "no results",
+  "cannot locate",
+  "couldn't locate",
+  "file not found",
+  "directory not found",
+  "repo not found",
+  "repository not found",
+  "project not found",
+] as const;
+
+/**
+ * Check if the output contains failure indicators suggesting the AI didn't actually complete the task.
+ * This prevents false positive completions where the AI says "I couldn't find X" but reports success.
+ */
+function containsFailureIndicators(output: string | undefined): boolean {
+  if (!output) return false;
+  const outputLower = output.toLowerCase();
+  return FAILURE_INDICATORS.some(indicator => outputLower.includes(indicator));
+}
+
 /** Default Nexus API URL */
 const DEFAULT_NEXUS_URL = 'https://nexus-mcp.solamp.workers.dev';
 
@@ -56,7 +98,24 @@ export async function reportToNexus(
 
   try {
     if (result.success) {
-      // Success case: mark task complete
+      // Check for false positive success - AI reported success but output indicates failure
+      const isFalsePositive = containsFailureIndicators(result.output);
+
+      if (isFalsePositive) {
+        console.warn(`[NexusCallback] False positive detected for task ${result.task_id}: output contains failure indicators`);
+        console.warn(`[NexusCallback] Output preview: ${(result.output || '').substring(0, 200)}`);
+
+        // Treat as failure - the AI said success but didn't actually complete the work
+        const falsePositiveResult: NexusExecutionResult = {
+          ...result,
+          success: false,
+          error: `False positive: AI reported success but output indicates failure. Output: ${(result.output || '').substring(0, 500)}`,
+        };
+
+        return await handleTaskFailure(env, nexusUrl, passphrase, falsePositiveResult);
+      }
+
+      // Genuine success case: mark task complete
       return await markTaskComplete(nexusUrl, passphrase, result);
     } else {
       // Failure case: increment retry count, potentially quarantine
