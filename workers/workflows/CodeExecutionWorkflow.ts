@@ -23,6 +23,61 @@ import type { CodeExecutionParams, ExecutionResult } from './types';
 import type { NexusEnv } from './lib/nexus-callback';
 import { reportToNexus } from './lib/nexus-callback';
 
+// ============================================================================
+// Failure Indicator Detection (Defense-in-Depth)
+// Catches cases where AI reports success but output shows it couldn't complete
+// ============================================================================
+
+/**
+ * Failure indicators that suggest the AI reported success but didn't actually complete the task.
+ * This is a SUBSET of the full list - focused on the most common false-positive patterns.
+ * The full list is in:
+ * - nexus/src/lib/validation.ts (canonical source)
+ * - sandbox-executor/src/index.ts
+ * - nexus-callback.ts
+ */
+const FAILURE_INDICATORS = [
+  // Most common false-positive patterns
+  "couldn't find", "could not find", "can't find", "cannot find",
+  "doesn't have", "does not have", "not found",
+  "doesn't exist", "does not exist", "file not found",
+  "repo not found", "project not found", "reference not found",
+  "failed to", "unable to", "i can't", "i cannot",
+  "couldn't complete", "could not complete", "unable to complete",
+  // Idea-specific patterns (critical for this use case)
+  "idea reference doesn't", "idea reference does not",
+  "doesn't have a corresponding", "does not have a corresponding",
+  "file i can find", "no corresponding file",
+  "no repo was created", "no worker deployed", "no database created",
+  // Setup/initialization patterns
+  "hasn't been created", "hasn't set up", "hasn't found",
+  "need to create", "needs to be created", "must be created",
+] as const;
+
+/**
+ * Normalize text for comparison by replacing curly quotes with straight quotes.
+ */
+function normalizeQuotes(text: string): string {
+  return text
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"');
+}
+
+/**
+ * Check if output contains failure indicators suggesting the AI didn't complete the task.
+ * Returns the matched indicator for logging, or null if no match.
+ */
+function findFailureIndicator(output: string | undefined): string | null {
+  if (!output) return null;
+  const normalized = normalizeQuotes(output.toLowerCase());
+  for (const indicator of FAILURE_INDICATORS) {
+    if (normalized.includes(indicator)) {
+      return indicator;
+    }
+  }
+  return null;
+}
+
 // Default sandbox-executor URL
 const DEFAULT_SANDBOX_EXECUTOR_URL = 'https://sandbox-executor.solamp.workers.dev';
 
@@ -366,6 +421,25 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
         throw new Error(errorMessage);
       }
 
+      // DEFENSE-IN-DEPTH: Even if sandbox-executor reports success, validate the output
+      // for failure indicators. This catches cases where:
+      // 1. An older version of sandbox-executor without false-positive detection is deployed
+      // 2. A new failure pattern slips through sandbox-executor's checks
+      // 3. The AI output contains subtle failure indicators
+      const matchedIndicator = findFailureIndicator(result.logs);
+      if (matchedIndicator) {
+        console.warn(`[CodeExecutionWorkflow] FALSE POSITIVE DETECTED: "${matchedIndicator}"`);
+        console.warn(`[CodeExecutionWorkflow] Output preview: ${(result.logs || '').substring(0, 300)}`);
+        throw new Error(`FALSE_POSITIVE: AI reported success but output contains failure indicator: "${matchedIndicator}"`);
+      }
+
+      // Also check minimum output length - very short outputs are usually errors
+      const outputLength = (result.logs || '').trim().length;
+      if (outputLength < 100) {
+        console.warn(`[CodeExecutionWorkflow] Output too short (${outputLength} chars), treating as failure`);
+        throw new Error(`Output too short (${outputLength} chars) - likely indicates execution failure`);
+      }
+
       return {
         success: true,
         task_id: taskId,
@@ -397,6 +471,15 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
     }
     if (e.includes('failed to classify') || e.includes('cannot parse')) {
       return { action: 'quarantine', reason: 'Task parsing failed - will not retry' };
+    }
+    // FALSE_POSITIVE errors indicate the AI couldn't actually complete the task
+    // These should quarantine immediately - retrying won't help
+    if (e.includes('false_positive') || e.includes('failure indicator')) {
+      return { action: 'quarantine', reason: 'False positive detected - task not actually completed' };
+    }
+    // Short output errors also indicate fundamental issues with task execution
+    if (e.includes('output too short')) {
+      return { action: 'quarantine', reason: 'Output too short - task likely failed to execute' };
     }
 
     // Try fallback executor
