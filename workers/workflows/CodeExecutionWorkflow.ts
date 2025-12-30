@@ -52,6 +52,11 @@ const FAILURE_INDICATORS = [
   // Setup/initialization patterns
   "hasn't been created", "hasn't set up", "hasn't found",
   "need to create", "needs to be created", "must be created",
+  // Additional patterns added 2024-12-30
+  "no action taken", "no changes made", "nothing to do",
+  "cannot proceed", "couldn't proceed", "no work done",
+  "nothing to commit", "nothing to deploy", "empty project",
+  "requires setup", "not implemented", "placeholder",
 ] as const;
 
 /**
