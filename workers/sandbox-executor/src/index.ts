@@ -6,7 +6,7 @@
  * - POST /execute - Delegate to on-prem runner (Claude primary, Gemini fallback)
  * - GET /health - Health check endpoint
  *
- * @version 2.1.0 - Runner-only mode with Claude/Gemini fallback
+ * @version 2.2.0 - Added false-positive detection for tasks marked complete without execution
  */
 
 import type {
@@ -17,6 +17,86 @@ import type {
 } from './types';
 
 // Note: Sandbox DO was removed in migration v2 - no longer exported
+
+// ============================================================================
+// Failure Indicator Detection
+// Catches cases where AI reports success but output shows it couldn't complete
+// ============================================================================
+
+/**
+ * Failure indicators that suggest the AI reported success but didn't actually complete the task.
+ * These phrases in the output indicate the AI couldn't find resources, files, or complete the work.
+ *
+ * IMPORTANT: Must be kept in sync with:
+ * - nexus/src/lib/validation.ts FAILURE_INDICATORS
+ * - de/workers/workflows/lib/nexus-callback.ts FAILURE_INDICATORS
+ */
+const FAILURE_INDICATORS = [
+  // Resource not found patterns
+  "couldn't find", "could not find", "can't find", "cannot find",
+  "doesn't have", "does not have", "not found", "no such file",
+  "doesn't exist", "does not exist", "file not found", "directory not found",
+  "repo not found", "repository not found", "project not found",
+  "reference not found", "idea not found",
+  // Failure action patterns
+  "failed to", "unable to", "i can't", "i cannot",
+  "i'm unable", "i am unable", "cannot locate", "couldn't locate",
+  "couldn't create", "could not create", "wasn't able", "was not able",
+  // Empty/missing result patterns
+  "no matching", "nothing found", "no results", "empty result", "no data",
+  // Explicit error indicators
+  "error:", "error occurred", "exception:",
+  // Task incomplete patterns
+  "task incomplete", "could not complete", "couldn't complete",
+  "unable to complete", "did not complete", "didn't complete",
+  // Missing reference patterns (for idea-based tasks)
+  "reference doesn't have", "reference does not have",
+  "doesn't have a corresponding", "does not have a corresponding",
+  "no corresponding file", "no corresponding project",
+  "missing reference", "invalid reference",
+  // Additional patterns for edge cases
+  "i can find", // catches "file I can find" negation patterns
+  "no repo", "no repository", "no project",
+  "couldn't access", "could not access", "can't access", "cannot access",
+  "no idea file", "idea file not", "idea reference not",
+  "there is no", "there are no", "there isn't", "there aren't",
+  "without a", "missing a", "lack of", "lacking",
+  "haven't been created", "hasn't been created", "has not been created",
+  "wasn't created", "were not created", "weren't created",
+  "no github", "no cloudflare", "no d1", "no worker",
+  "the task cannot", "the task could not", "this task cannot",
+  // Additional patterns for false completions
+  "idea reference doesn't", "idea reference does not",
+  "file i can find",
+  "no repo was created", "no repository was created",
+  "no worker deployed", "no database created",
+  "completion result says",
+] as const;
+
+/**
+ * Normalize text for comparison by replacing curly quotes with straight quotes.
+ * Handles typographic quotes that AI models often use.
+ */
+function normalizeQuotes(text: string): string {
+  return text
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")  // Single curly quotes → '
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"'); // Double curly quotes → "
+}
+
+/**
+ * Check if output contains failure indicators suggesting the AI didn't complete the task.
+ * Returns the matched indicator for logging, or null if no match.
+ */
+function findFailureIndicator(output: string | undefined): string | null {
+  if (!output) return null;
+  const normalized = normalizeQuotes(output.toLowerCase());
+  for (const indicator of FAILURE_INDICATORS) {
+    if (normalized.includes(indicator)) {
+      return indicator;
+    }
+  }
+  return null;
+}
 
 // Default runner URLs (via Cloudflare Tunnel)
 const DEFAULT_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
@@ -271,6 +351,21 @@ async function delegateToRunner(
       );
     }
 
+    // Check for false positive success - runner says success but output indicates failure
+    // This catches cases where the AI generates a response explaining why it couldn't complete
+    let actualSuccess = result.success;
+    let failureReason: string | undefined;
+
+    if (result.success && result.output) {
+      const matchedIndicator = findFailureIndicator(result.output);
+      if (matchedIndicator) {
+        actualSuccess = false;
+        failureReason = `FALSE_POSITIVE: AI reported success but output contains failure indicator: "${matchedIndicator}"`;
+        console.warn(`[RUNNER ${requestId}] ${failureReason}`);
+        console.warn(`[RUNNER ${requestId}] Output preview (first 300 chars): ${result.output.substring(0, 300)}`);
+      }
+    }
+
     // Log execution end to AI Gateway
     logToGateway(env, {
       request_id: requestId,
@@ -280,28 +375,31 @@ async function delegateToRunner(
       start_time: startTime,
       end_time: Date.now(),
       duration_ms: totalTime,
-      success: result.success,
-      error: result.success ? undefined : result.error,
+      success: actualSuccess,
+      error: actualSuccess ? undefined : (failureReason || result.error),
       event_type: 'execution_end',
     });
 
     // Return runner result formatted for our API
     return Response.json(
       {
-        success: result.success,
+        success: actualSuccess,
         request_id: requestId,
         timestamp: new Date().toISOString(),
         logs: result.output || result.error || 'No output',
+        error: failureReason, // Include failure reason if false positive detected
+        error_code: failureReason ? 'FALSE_POSITIVE_SUCCESS' : undefined,
         metadata: {
           execution_time_ms: totalTime,
           runner_duration_ms: result.duration_ms,
           runner_url: runnerUrl,
           delegated_to_runner: true,
           exit_code: result.exit_code,
+          false_positive_detected: !!failureReason,
         },
       },
       {
-        status: result.success ? 200 : 500,
+        status: actualSuccess ? 200 : 500,
         headers: { 'X-Request-ID': requestId },
       }
     );
@@ -440,6 +538,21 @@ async function delegateToGeminiRunner(
       });
     }
 
+    // Check for false positive success - runner says success but output indicates failure
+    // This catches cases where the AI generates a response explaining why it couldn't complete
+    let actualSuccess = result.success;
+    let failureReason: string | undefined;
+
+    if (result.success && result.output) {
+      const matchedIndicator = findFailureIndicator(result.output);
+      if (matchedIndicator) {
+        actualSuccess = false;
+        failureReason = `FALSE_POSITIVE: AI reported success but output contains failure indicator: "${matchedIndicator}"`;
+        console.warn(`[GEMINI ${requestId}] ${failureReason}`);
+        console.warn(`[GEMINI ${requestId}] Output preview (first 300 chars): ${result.output.substring(0, 300)}`);
+      }
+    }
+
     // Log execution end to AI Gateway
     logToGateway(env, {
       request_id: requestId,
@@ -449,17 +562,19 @@ async function delegateToGeminiRunner(
       start_time: startTime,
       end_time: Date.now(),
       duration_ms: totalTime,
-      success: result.success,
-      error: result.success ? undefined : result.error,
+      success: actualSuccess,
+      error: actualSuccess ? undefined : (failureReason || result.error),
       event_type: 'execution_end',
     });
 
     // Return runner result formatted for our API
     return Response.json({
-      success: result.success,
+      success: actualSuccess,
       request_id: requestId,
       timestamp: new Date().toISOString(),
       logs: result.output || result.error || 'No output',
+      error: failureReason, // Include failure reason if false positive detected
+      error_code: failureReason ? 'FALSE_POSITIVE_SUCCESS' : undefined,
       metadata: {
         execution_time_ms: totalTime,
         runner_duration_ms: result.duration_ms,
@@ -467,9 +582,10 @@ async function delegateToGeminiRunner(
         delegated_to_runner: true,
         executor_type: 'gemini',
         exit_code: result.exit_code,
+        false_positive_detected: !!failureReason,
       },
     }, {
-      status: result.success ? 200 : 500,
+      status: actualSuccess ? 200 : 500,
       headers: { 'X-Request-ID': requestId },
     });
 
@@ -665,7 +781,7 @@ export default {
           status: 'healthy',
           service: 'sandbox-executor',
           timestamp: new Date().toISOString(),
-          version: '2.1.0', // Bumped for fallback support
+          version: '2.2.0', // Added false-positive detection
           runner_url: claudeRunnerUrl,
           runner_configured: !!env.RUNNER_SECRET,
         };
