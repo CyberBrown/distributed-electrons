@@ -6,7 +6,7 @@
  * - POST /execute - Delegate to on-prem runner (Claude primary, Gemini fallback)
  * - GET /health - Health check endpoint
  *
- * @version 2.2.0 - Added false-positive detection for tasks marked complete without execution
+ * @version 2.2.1 - Deployment sync: false-positive detection for tasks marked complete without execution
  */
 
 import type {
@@ -800,7 +800,7 @@ export default {
           status: 'healthy',
           service: 'sandbox-executor',
           timestamp: new Date().toISOString(),
-          version: '2.2.0', // Added false-positive detection
+          version: '2.2.1', // Added false-positive detection
           runner_url: claudeRunnerUrl,
           runner_configured: !!env.RUNNER_SECRET,
         };
