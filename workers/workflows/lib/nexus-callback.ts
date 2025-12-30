@@ -94,16 +94,29 @@ const FAILURE_INDICATORS = [
 ] as const;
 
 /**
+ * Normalize text for comparison by replacing curly quotes with straight quotes
+ * This handles cases where AI outputs use typographic quotes instead of standard ASCII
+ */
+function normalizeQuotes(text: string): string {
+  return text
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")  // Single curly quotes → '
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"'); // Double curly quotes → "
+}
+
+/**
  * Check if the output contains failure indicators suggesting the AI didn't actually complete the task.
  * This prevents false positive completions where the AI says "I couldn't find X" but reports success.
+ *
+ * Normalizes quotes to handle typographic apostrophes (e.g., ' vs ') and logs the matched indicator.
  *
  * @returns Object with matched indicator for logging, or null if no match
  */
 function findFailureIndicator(output: string | undefined): string | null {
   if (!output) return null;
-  const outputLower = output.toLowerCase();
+  // Normalize quotes and convert to lowercase for comparison
+  const normalizedOutput = normalizeQuotes(output.toLowerCase());
   for (const indicator of FAILURE_INDICATORS) {
-    if (outputLower.includes(indicator)) {
+    if (normalizedOutput.includes(indicator)) {
       return indicator;
     }
   }
