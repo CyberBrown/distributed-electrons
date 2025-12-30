@@ -29,43 +29,93 @@ const MAX_RETRIES = 5;
 /**
  * Failure indicators that suggest the AI reported success but didn't actually complete the task.
  * These phrases in the output indicate the AI couldn't find resources, files, or complete the work.
+ *
+ * IMPORTANT: These are checked case-insensitively against the full output.
+ * Add new patterns when you see tasks marked complete without actual work.
  */
 const FAILURE_INDICATORS = [
+  // Resource not found patterns
   "couldn't find",
   "could not find",
+  "can't find",
+  "cannot find",
   "doesn't have",
   "does not have",
   "not found",
-  "failed to",
-  "error:",
-  "unable to",
   "no such file",
   "doesn't exist",
   "does not exist",
-  "i can't",
-  "i cannot",
-  "i'm unable",
-  "i am unable",
-  "no matching",
-  "nothing found",
-  "no results",
-  "cannot locate",
-  "couldn't locate",
   "file not found",
   "directory not found",
   "repo not found",
   "repository not found",
   "project not found",
+  "reference not found",
+  "idea not found",
+  // Failure action patterns
+  "failed to",
+  "unable to",
+  "i can't",
+  "i cannot",
+  "i'm unable",
+  "i am unable",
+  "cannot locate",
+  "couldn't locate",
+  "couldn't create",
+  "could not create",
+  "wasn't able",
+  "was not able",
+  // Empty/missing result patterns
+  "no matching",
+  "nothing found",
+  "no results",
+  "empty result",
+  "no data",
+  // Explicit error indicators
+  "error:",
+  "error occurred",
+  "exception:",
+  // Task incomplete patterns
+  "task incomplete",
+  "could not complete",
+  "couldn't complete",
+  "unable to complete",
+  "did not complete",
+  "didn't complete",
+  // Missing reference patterns (for idea-based tasks)
+  "reference doesn't have",
+  "reference does not have",
+  "doesn't have a corresponding",
+  "does not have a corresponding",
+  "no corresponding file",
+  "no corresponding project",
+  "missing reference",
+  "invalid reference",
 ] as const;
+
+/**
+ * Check if the output contains failure indicators suggesting the AI didn't actually complete the task.
+ * This prevents false positive completions where the AI says "I couldn't find X" but reports success.
+ *
+ * @returns Object with matched indicator for logging, or null if no match
+ */
+function findFailureIndicator(output: string | undefined): string | null {
+  if (!output) return null;
+  const outputLower = output.toLowerCase();
+  for (const indicator of FAILURE_INDICATORS) {
+    if (outputLower.includes(indicator)) {
+      return indicator;
+    }
+  }
+  return null;
+}
 
 /**
  * Check if the output contains failure indicators suggesting the AI didn't actually complete the task.
  * This prevents false positive completions where the AI says "I couldn't find X" but reports success.
  */
 function containsFailureIndicators(output: string | undefined): boolean {
-  if (!output) return false;
-  const outputLower = output.toLowerCase();
-  return FAILURE_INDICATORS.some(indicator => outputLower.includes(indicator));
+  return findFailureIndicator(output) !== null;
 }
 
 /** Default Nexus API URL */
@@ -99,22 +149,25 @@ export async function reportToNexus(
   try {
     if (result.success) {
       // Check for false positive success - AI reported success but output indicates failure
-      const isFalsePositive = containsFailureIndicators(result.output);
+      const matchedIndicator = findFailureIndicator(result.output);
 
-      if (isFalsePositive) {
-        console.warn(`[NexusCallback] False positive detected for task ${result.task_id}: output contains failure indicators`);
-        console.warn(`[NexusCallback] Output preview: ${(result.output || '').substring(0, 200)}`);
+      if (matchedIndicator) {
+        console.warn(`[NexusCallback] FALSE POSITIVE DETECTED for task ${result.task_id}`);
+        console.warn(`[NexusCallback] Matched indicator: "${matchedIndicator}"`);
+        console.warn(`[NexusCallback] Output length: ${(result.output || '').length} chars`);
+        console.warn(`[NexusCallback] Output preview (first 300 chars): ${(result.output || '').substring(0, 300)}`);
 
         // Treat as failure - the AI said success but didn't actually complete the work
         const falsePositiveResult: NexusExecutionResult = {
           ...result,
           success: false,
-          error: `False positive: AI reported success but output indicates failure. Output: ${(result.output || '').substring(0, 500)}`,
+          error: `False positive detected (matched: "${matchedIndicator}"): AI reported success but output indicates failure. Output: ${(result.output || '').substring(0, 500)}`,
         };
 
         return await handleTaskFailure(env, nexusUrl, passphrase, falsePositiveResult);
       }
 
+      console.log(`[NexusCallback] Task ${result.task_id} passed false-positive check, marking complete`);
       // Genuine success case: mark task complete
       return await markTaskComplete(nexusUrl, passphrase, result);
     } else {
