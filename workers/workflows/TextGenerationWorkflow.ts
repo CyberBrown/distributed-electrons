@@ -95,13 +95,30 @@ const FAILURE_INDICATORS = [
 ] as const;
 
 /**
+ * Normalize text for comparison by replacing curly quotes with straight quotes.
+ * This handles cases where AI outputs use typographic quotes instead of standard ASCII.
+ *
+ * IMPORTANT: Keep this in sync with:
+ * - nexus/src/lib/validation.ts
+ * - de/workers/workflows/lib/nexus-callback.ts
+ * - de/workers/workflows/PrimeWorkflow.ts
+ */
+function normalizeQuotes(text: string): string {
+  return text
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")  // Single curly quotes → '
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"'); // Double curly quotes → "
+}
+
+/**
  * Check if the output contains failure indicators suggesting the AI didn't actually complete the task.
  * This prevents false positive completions where the AI says "I couldn't find X" but reports success.
+ *
+ * Normalizes quotes to handle typographic apostrophes (e.g., ' vs ').
  */
 function containsFailureIndicators(text: string | undefined): boolean {
   if (!text) return false;
-  const textLower = text.toLowerCase();
-  return FAILURE_INDICATORS.some(indicator => textLower.includes(indicator));
+  const normalizedText = normalizeQuotes(text.toLowerCase());
+  return FAILURE_INDICATORS.some(indicator => normalizedText.includes(indicator));
 }
 
 // Default URLs
