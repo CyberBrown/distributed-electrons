@@ -38,8 +38,10 @@ import type {
  * - TextGenerationWorkflow.ts
  * - nexus/src/workflows/TaskExecutorWorkflow.ts
  * - de/workers/workflows/lib/nexus-callback.ts
+ * - nexus/src/index.ts (workflow-callback handler)
  */
 const FAILURE_INDICATORS = [
+  // Resource not found patterns
   "couldn't find",
   "could not find",
   "can't find",
@@ -57,6 +59,7 @@ const FAILURE_INDICATORS = [
   "project not found",
   "reference not found",
   "idea not found",
+  // Failure action patterns
   "failed to",
   "unable to",
   "i can't",
@@ -69,23 +72,52 @@ const FAILURE_INDICATORS = [
   "could not create",
   "wasn't able",
   "was not able",
+  // Empty/missing result patterns
+  "no matching",
+  "nothing found",
+  "no results",
+  "empty result",
+  "no data",
+  // Explicit error indicators
+  "error:",
+  "error occurred",
+  "exception:",
+  // Task incomplete patterns
   "task incomplete",
   "could not complete",
   "couldn't complete",
   "unable to complete",
+  "did not complete",
+  "didn't complete",
+  // Missing reference patterns (for idea-based tasks)
   "reference doesn't have",
   "reference does not have",
   "doesn't have a corresponding",
   "does not have a corresponding",
+  "no corresponding file",
+  "no corresponding project",
+  "missing reference",
+  "invalid reference",
 ] as const;
 
 /**
+ * Normalize text for comparison by replacing curly quotes with straight quotes.
+ * This handles cases where AI outputs use typographic quotes instead of standard ASCII.
+ */
+function normalizeQuotes(text: string): string {
+  return text
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")  // Single curly quotes → '
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"'); // Double curly quotes → "
+}
+
+/**
  * Check if the output contains failure indicators suggesting the task wasn't completed.
+ * Normalizes quotes to handle typographic apostrophes (e.g., ' vs ').
  */
 function containsFailureIndicators(text: string | undefined): boolean {
   if (!text) return false;
-  const textLower = text.toLowerCase();
-  return FAILURE_INDICATORS.some(indicator => textLower.includes(indicator));
+  const normalizedText = normalizeQuotes(text.toLowerCase());
+  return FAILURE_INDICATORS.some(indicator => normalizedText.includes(indicator));
 }
 
 // Workflow bindings are now used directly instead of HTTP fetch
