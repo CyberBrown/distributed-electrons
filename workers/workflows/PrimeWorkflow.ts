@@ -327,6 +327,7 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
             preferred_executor:
               params.hints?.provider === 'gemini' ? 'gemini' : 'claude',
             timeout_ms: params.timeout_ms,
+            callback_url: params.callback_url,
           },
         });
         break;
@@ -340,6 +341,7 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
             system_prompt: params.context?.system_prompt,
             max_tokens: 4096,
             temperature: 0.7,
+            callback_url: params.callback_url,
           },
         });
         break;
@@ -351,6 +353,7 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
             request_id: params.task_id,
             timeline: params.context?.timeline,
             output: params.context?.output,
+            callback_url: params.callback_url,
           },
         });
         break;
