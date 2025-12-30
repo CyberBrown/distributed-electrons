@@ -30,6 +30,64 @@ import type {
   PrimeEnv,
 } from './types';
 
+/**
+ * Failure indicators that suggest the AI reported success but didn't actually complete the task.
+ * Defense-in-depth check - sub-workflows should also check these, but we validate here too.
+ *
+ * IMPORTANT: Keep this in sync with:
+ * - TextGenerationWorkflow.ts
+ * - nexus/src/workflows/TaskExecutorWorkflow.ts
+ * - de/workers/workflows/lib/nexus-callback.ts
+ */
+const FAILURE_INDICATORS = [
+  "couldn't find",
+  "could not find",
+  "can't find",
+  "cannot find",
+  "doesn't have",
+  "does not have",
+  "not found",
+  "no such file",
+  "doesn't exist",
+  "does not exist",
+  "file not found",
+  "directory not found",
+  "repo not found",
+  "repository not found",
+  "project not found",
+  "reference not found",
+  "idea not found",
+  "failed to",
+  "unable to",
+  "i can't",
+  "i cannot",
+  "i'm unable",
+  "i am unable",
+  "cannot locate",
+  "couldn't locate",
+  "couldn't create",
+  "could not create",
+  "wasn't able",
+  "was not able",
+  "task incomplete",
+  "could not complete",
+  "couldn't complete",
+  "unable to complete",
+  "reference doesn't have",
+  "reference does not have",
+  "doesn't have a corresponding",
+  "does not have a corresponding",
+] as const;
+
+/**
+ * Check if the output contains failure indicators suggesting the task wasn't completed.
+ */
+function containsFailureIndicators(text: string | undefined): boolean {
+  if (!text) return false;
+  const textLower = text.toLowerCase();
+  return FAILURE_INDICATORS.some(indicator => textLower.includes(indicator));
+}
+
 // Workflow bindings are now used directly instead of HTTP fetch
 
 interface ValidationResult {
@@ -432,13 +490,23 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
             error?: string;
           } | undefined;
 
+          // Defense-in-depth: Even if sub-workflow reports success,
+          // check for failure indicators in the output text
+          const outputText = output?.output || output?.text;
+          const hasFailureIndicators = containsFailureIndicators(outputText);
+
+          if (hasFailureIndicators && output?.success !== false) {
+            console.log(`[PrimeWorkflow] Sub-workflow reported success but output contains failure indicators`);
+            console.log(`[PrimeWorkflow] Output preview: ${outputText?.substring(0, 200)}`);
+          }
+
           return {
-            success: output?.success ?? true,
+            success: (output?.success ?? true) && !hasFailureIndicators,
             output: output?.output,
             text: output?.text,
             executor: output?.executor,
             provider: output?.provider,
-            error: output?.error,
+            error: hasFailureIndicators ? 'Response indicates task was not completed' : output?.error,
           };
         }
 

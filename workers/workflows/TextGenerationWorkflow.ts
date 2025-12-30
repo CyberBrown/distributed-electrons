@@ -25,6 +25,85 @@ import type {
   ProviderStatus,
 } from './types';
 
+/**
+ * Failure indicators that suggest the AI reported success but didn't actually complete the task.
+ * These phrases in the output indicate the AI couldn't find resources, files, or complete the work.
+ *
+ * IMPORTANT: Keep this in sync with:
+ * - nexus/src/workflows/TaskExecutorWorkflow.ts
+ * - de/workers/workflows/lib/nexus-callback.ts
+ * - nexus/src/index.ts (workflow-callback handler)
+ */
+const FAILURE_INDICATORS = [
+  // Resource not found patterns
+  "couldn't find",
+  "could not find",
+  "can't find",
+  "cannot find",
+  "doesn't have",
+  "does not have",
+  "not found",
+  "no such file",
+  "doesn't exist",
+  "does not exist",
+  "file not found",
+  "directory not found",
+  "repo not found",
+  "repository not found",
+  "project not found",
+  "reference not found",
+  "idea not found",
+  // Failure action patterns
+  "failed to",
+  "unable to",
+  "i can't",
+  "i cannot",
+  "i'm unable",
+  "i am unable",
+  "cannot locate",
+  "couldn't locate",
+  "couldn't create",
+  "could not create",
+  "wasn't able",
+  "was not able",
+  // Empty/missing result patterns
+  "no matching",
+  "nothing found",
+  "no results",
+  "empty result",
+  "no data",
+  // Explicit error indicators
+  "error:",
+  "error occurred",
+  "exception:",
+  // Task incomplete patterns
+  "task incomplete",
+  "could not complete",
+  "couldn't complete",
+  "unable to complete",
+  "did not complete",
+  "didn't complete",
+  // Missing reference patterns (for idea-based tasks)
+  "reference doesn't have",
+  "reference does not have",
+  "doesn't have a corresponding",
+  "does not have a corresponding",
+  "no corresponding file",
+  "no corresponding project",
+  "missing reference",
+  "invalid reference",
+] as const;
+
+/**
+ * Check if the output contains failure indicators suggesting the AI didn't actually complete the task.
+ * This prevents false positive completions where the AI says "I couldn't find X" but reports success.
+ */
+function containsFailureIndicators(text: string | undefined): boolean {
+  if (!text) return false;
+  const textLower = text.toLowerCase();
+  return FAILURE_INDICATORS.some(indicator => textLower.includes(indicator));
+}
+
 // Default URLs
 const DEFAULT_SPARK_VLLM_URL = 'https://vllm.shiftaltcreate.com';
 const DEFAULT_CLAUDE_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
@@ -113,21 +192,34 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
               temperature,
             });
 
+            // Check for failure indicators in the response text
+            // This catches cases where the AI says "I couldn't find..." but still returns a response
+            const isActualFailure = containsFailureIndicators(response.text);
+            if (isActualFailure) {
+              console.log(`[TextGenWorkflow] ${provider} response contains failure indicators: ${response.text.substring(0, 200)}`);
+            }
+
             return {
-              success: true,
+              success: !isActualFailure, // Only success if no failure indicators
               request_id,
               provider,
               text: response.text,
               tokens_used: response.tokens_used,
               duration_ms: Date.now() - startTime,
               attempted_providers: attemptedProviders,
+              error: isActualFailure ? 'Response indicates task was not completed' : undefined,
             };
           }
         );
 
-        // Success! Exit the waterfall
-        console.log(`[TextGenWorkflow] Success with ${provider}`);
-        break;
+        // Only exit waterfall if it's a genuine success (no failure indicators)
+        if (result.success) {
+          console.log(`[TextGenWorkflow] Success with ${provider}`);
+          break;
+        } else {
+          console.log(`[TextGenWorkflow] ${provider} returned failure indicators, continuing waterfall`);
+          // Don't break - try next provider since this response indicates failure
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`[TextGenWorkflow] ${provider} failed: ${errorMessage}`);
