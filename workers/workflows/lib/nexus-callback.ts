@@ -133,6 +133,25 @@ const FAILURE_INDICATORS = [
   "no worker deployed",
   "no database created",
   "completion result says", // meta-pattern for reflection about failed execution
+  // Additional patterns to catch more edge cases
+  "haven't found", "have not found", "hasn't found", "has not found",
+  "haven't set up", "have not set up", "hasn't set up", "has not set up",
+  "setup yet", "not initialized", "not been initialized",
+  "no setup", "no configuration", "not configured",
+  "doesn't appear", "does not appear", "didn't find", "did not find",
+  "looked for", "searched for",
+  "need to create", "needs to be created", "must be created",
+  "should be created", "would need to", "will need to",
+  "before i can", "before we can", "in order to",
+  "prerequisite", "prerequisites", "first need",
+  "no code", "no files", "no implementation",
+  "empty repo", "empty repository", "blank project",
+  "scaffold", "scaffolding", "boilerplate",
+  "set up the project", "set up the repo", "create the project",
+  "initialize the project", "initialize the repo",
+  "project structure", "folder structure", "directory structure",
+  "does not have any", "doesn't have any", "don't have any",
+  "nothing has been", "nothing was", "nothing is",
 ] as const;
 
 /**
@@ -203,6 +222,22 @@ export async function reportToNexus(
 
   try {
     if (result.success) {
+      // SECURITY: Check minimum output length
+      // Very short outputs typically indicate errors or non-execution
+      const outputLength = (result.output || '').trim().length;
+      if (outputLength < 100) {
+        console.warn(`[NexusCallback] Task ${result.task_id} output too short (${outputLength} chars), treating as failure`);
+        console.warn(`[NexusCallback] Short output: ${result.output}`);
+
+        const shortOutputResult: NexusExecutionResult = {
+          ...result,
+          success: false,
+          error: `Output too short (${outputLength} chars) - likely indicates execution failure. Output: ${result.output}`,
+        };
+
+        return await handleTaskFailure(env, nexusUrl, passphrase, shortOutputResult);
+      }
+
       // Check for false positive success - AI reported success but output indicates failure
       const matchedIndicator = findFailureIndicator(result.output);
 
