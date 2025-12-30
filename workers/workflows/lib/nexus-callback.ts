@@ -124,6 +124,15 @@ const FAILURE_INDICATORS = [
   "the task cannot",
   "the task could not",
   "this task cannot",
+  // Additional patterns added 2024-12-30 after investigating false completions
+  "idea reference doesn't",
+  "idea reference does not",
+  "file i can find", // catches "...a corresponding file I can find"
+  "no repo was created",
+  "no repository was created",
+  "no worker deployed",
+  "no database created",
+  "completion result says", // meta-pattern for reflection about failed execution
 ] as const;
 
 /**
