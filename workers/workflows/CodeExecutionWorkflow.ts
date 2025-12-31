@@ -370,6 +370,8 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
       error: result.error,
       quarantine: result.quarantine || false,
       duration_ms: result.duration_ms,
+      waterfall_position: result.waterfall_position,
+      attempted_models: result.attempted_models,
     };
   }
 
