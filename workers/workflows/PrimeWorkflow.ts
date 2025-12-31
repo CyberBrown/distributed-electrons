@@ -29,6 +29,7 @@ import type {
   TaskType,
   PrimeEnv,
 } from './types';
+import { determineWaterfall, parseDefaultWaterfall } from './lib/model-mapping';
 
 /**
  * Failure indicators that suggest the AI reported success but didn't actually complete the task.
@@ -441,12 +442,27 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
 
     switch (taskType) {
       case 'code':
+        // Determine effective waterfall for code execution
+        const defaultWaterfall = parseDefaultWaterfall(this.env.DEFAULT_MODEL_WATERFALL);
+        const waterfall = determineWaterfall({
+          model_waterfall: params.model_waterfall,
+          primary_model: params.primary_model,
+          preferred_executor: params.hints?.provider === 'gemini' ? 'gemini' : 'claude',
+          override_until: params.override_until,
+          override_waterfall: params.override_waterfall,
+          default_waterfall: defaultWaterfall,
+        });
+
+        console.log(`[PrimeWorkflow] Code execution waterfall: ${waterfall.join(' → ')}`);
+
         instance = await this.env.CODE_EXECUTION_WORKFLOW.create({
           id: workflowId,
           params: {
             task_id: params.task_id,
             prompt: `${params.title}\n\n${params.description}`,
             repo_url: params.context?.repo,
+            model_waterfall: waterfall,
+            // Keep preferred_executor for backwards compatibility
             preferred_executor:
               params.hints?.provider === 'gemini' ? 'gemini' : 'claude',
             timeout_ms: params.timeout_ms,

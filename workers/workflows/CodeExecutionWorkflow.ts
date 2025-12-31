@@ -22,6 +22,7 @@ import { WorkflowEntrypoint, WorkflowStep, type WorkflowEvent } from 'cloudflare
 import type { CodeExecutionParams, ExecutionResult } from './types';
 import type { NexusEnv } from './lib/nexus-callback';
 import { reportToNexus } from './lib/nexus-callback';
+import { getRunnerForModel, legacyExecutorToWaterfall } from './lib/model-mapping';
 
 // ============================================================================
 // Failure Indicator Detection (Defense-in-Depth)
@@ -110,13 +111,17 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
       prompt,
       repo_url,
       preferred_executor = 'claude',
+      model_waterfall,
       context: _context,
       callback_url,
       timeout_ms = 300000, // 5 minutes default
     } = event.payload;
 
     console.log(`[CodeExecutionWorkflow] Starting for task ${task_id}`);
-    console.log(`[CodeExecutionWorkflow] Preferred executor: ${preferred_executor}`);
+
+    // Determine waterfall (use provided or convert from legacy executor)
+    const waterfall = model_waterfall || legacyExecutorToWaterfall(preferred_executor);
+    console.log(`[CodeExecutionWorkflow] Model waterfall: ${waterfall.join(' → ')}`);
 
     // Step 1: Validate task parameters
     const validation = await step.do(
@@ -165,98 +170,107 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
 
     console.log(`[CodeExecutionWorkflow] Task validated successfully`);
 
-    // Step 2: Execute via sandbox-executor (handles runner routing + fallback)
-    let result: ExecutionResult;
+    // Step 2: Execute with waterfall (try each model in sequence)
+    let result: ExecutionResult | undefined;
+    const attemptedModels: string[] = [];
 
-    try {
-      result = await step.do(
-        'execute-task',
-        {
-          retries: {
-            limit: 2,
-            delay: '10 seconds',
-            backoff: 'exponential',
-          },
-          timeout: `${Math.ceil(timeout_ms / 1000)} seconds`,
-        },
-        async () => {
-          return await this.executeViaSandbox(
-            task_id,
-            prompt,
-            repo_url,
-            preferred_executor,
-            timeout_ms
-          );
-        }
-      );
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[CodeExecutionWorkflow] Execution failed: ${errorMessage}`);
+    let waterfallSuccess = false;
+    let waterfallPosition = -1;
 
-      // Step 3: Classify the error to decide action
-      const classification = await step.do(
-        'classify-error',
-        {
-          retries: { limit: 1, delay: '1 second', backoff: 'constant' },
-          timeout: '5 seconds',
-        },
-        async () => {
-          return this.classifyError(errorMessage);
-        }
-      );
+    for (let i = 0; i < waterfall.length; i++) {
+      const model = waterfall[i];
+      attemptedModels.push(model);
 
-      console.log(`[CodeExecutionWorkflow] Error classified: ${classification.action} - ${classification.reason}`);
+      console.log(`[CodeExecutionWorkflow] Trying model ${i + 1}/${waterfall.length}: ${model}`);
 
-      // If we should try fallback executor
-      if (classification.action === 'try-fallback') {
-        const fallbackExecutor = preferred_executor === 'claude' ? 'gemini' : 'claude';
-        console.log(`[CodeExecutionWorkflow] Trying fallback executor: ${fallbackExecutor}`);
-
-        try {
-          result = await step.do(
-            'execute-fallback',
-            {
-              retries: {
-                limit: 2,
-                delay: '10 seconds',
-                backoff: 'exponential',
-              },
-              timeout: `${Math.ceil(timeout_ms / 1000)} seconds`,
+      try {
+        result = await step.do(
+          `execute-model-${i}`,
+          {
+            retries: {
+              limit: 2,
+              delay: '30 seconds',
+              backoff: 'exponential',
             },
-            async () => {
-              return await this.executeViaSandbox(
-                task_id,
-                prompt,
-                repo_url,
-                fallbackExecutor,
-                timeout_ms
-              );
-            }
-          );
-        } catch (fallbackError) {
-          const fallbackErrorMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-          console.error(`[CodeExecutionWorkflow] Fallback also failed: ${fallbackErrorMessage}`);
+            timeout: `${Math.ceil(timeout_ms / 1000)} seconds`,
+          },
+          async () => {
+            return await this.executeWithModel(
+              task_id,
+              prompt,
+              repo_url,
+              model,
+              timeout_ms
+            );
+          }
+        );
 
+        // Success! Break out of loop
+        waterfallSuccess = true;
+        waterfallPosition = i;
+        console.log(`[CodeExecutionWorkflow] Model ${model} succeeded (position ${i})`);
+        break;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[CodeExecutionWorkflow] Model ${model} failed: ${errorMessage}`);
+
+        // Classify the error
+        const classification = await step.do(
+          `classify-error-${i}`,
+          {
+            retries: { limit: 1, delay: '1 second', backoff: 'constant' },
+            timeout: '5 seconds',
+          },
+          async () => {
+            return this.classifyError(errorMessage);
+          }
+        );
+
+        console.log(`[CodeExecutionWorkflow] Error classified: ${classification.action} - ${classification.reason}`);
+
+        // If quarantine action, stop trying further models
+        if (classification.action === 'quarantine') {
+          console.log(`[CodeExecutionWorkflow] Quarantine error, stopping waterfall`);
           result = {
             success: false,
             task_id,
-            executor: fallbackExecutor,
-            error: `Both executors failed. Primary: ${errorMessage}. Fallback: ${fallbackErrorMessage}`,
+            executor: model,
+            error: errorMessage,
             quarantine: true,
             duration_ms: 0,
+            attempted_models: attemptedModels,
           };
+          break;
         }
-      } else {
-        // Quarantine or retry failed - create failed result
-        result = {
-          success: false,
-          task_id,
-          executor: preferred_executor,
-          error: errorMessage,
-          quarantine: classification.action === 'quarantine',
-          duration_ms: 0,
-        };
+
+        // Otherwise, continue to next model in waterfall
+        console.log(`[CodeExecutionWorkflow] Continuing to next model in waterfall`);
       }
+    }
+
+    // If all models failed without success
+    if (!waterfallSuccess && !result) {
+      const allErrors = attemptedModels.join(', ');
+      result = {
+        success: false,
+        task_id,
+        executor: 'ALL_RUNNERS_FAILED',
+        error: `All models in waterfall failed: ${allErrors}`,
+        quarantine: true,
+        duration_ms: 0,
+        attempted_models: attemptedModels,
+      };
+    }
+
+    // Add waterfall metadata to successful results (result is guaranteed to be defined here)
+    if (waterfallSuccess && result) {
+      result.waterfall_position = waterfallPosition;
+      result.attempted_models = attemptedModels;
+    }
+
+    // TypeScript: result is guaranteed to be defined at this point
+    if (!result) {
+      throw new Error('Internal error: result not set after waterfall execution');
     }
 
     // Step 3.5: Validate result for false positives BEFORE reporting
@@ -403,21 +417,23 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
   }
 
   /**
-   * Execute task via sandbox-executor
-   * Sandbox-executor handles runner routing and fallback internally
+   * Execute task with a specific model
+   * Routes to the appropriate runner based on model name
    */
-  private async executeViaSandbox(
+  private async executeWithModel(
     taskId: string,
     prompt: string,
-    repoUrl?: string,
-    executorType: 'claude' | 'gemini' = 'claude',
+    repoUrl: string | undefined,
+    model: string,
     timeoutMs: number = 300000
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
+    const runnerConfig = getRunnerForModel(model);
     const sandboxUrl = this.env.SANDBOX_EXECUTOR_URL || DEFAULT_SANDBOX_EXECUTOR_URL;
 
-    console.log(`[CodeExecutionWorkflow] Executing via sandbox-executor at ${sandboxUrl}`);
-    console.log(`[CodeExecutionWorkflow] Executor type: ${executorType}, Timeout: ${timeoutMs}ms`);
+    console.log(`[CodeExecutionWorkflow] Executing with model: ${model}`);
+    console.log(`[CodeExecutionWorkflow] Runner: ${runnerConfig.runner_type} (${runnerConfig.tunnel})`);
+    console.log(`[CodeExecutionWorkflow] API model: ${runnerConfig.api_model}`);
 
     // Build headers
     const headers: Record<string, string> = {
@@ -437,7 +453,10 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
         body: JSON.stringify({
           task: prompt,
           repo: repoUrl,
-          executor_type: executorType,
+          // For backwards compatibility, pass executor_type as runner_type
+          executor_type: runnerConfig.runner_type,
+          // NEW: Pass specific model to sandbox-executor
+          model: runnerConfig.api_model,
           options: {
             timeout_ms: timeoutMs,
           },
@@ -459,7 +478,7 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
 
       if (!result.success) {
         const errorMessage = result.error || result.error_code || 'Execution failed';
-        console.error(`[CodeExecutionWorkflow] Sandbox execution failed: ${errorMessage}`);
+        console.error(`[CodeExecutionWorkflow] Execution failed: ${errorMessage}`);
         throw new Error(errorMessage);
       }
 
@@ -485,14 +504,14 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
       return {
         success: true,
         task_id: taskId,
-        executor: (result.metadata?.executor_type as 'claude' | 'gemini') || executorType,
+        executor: model,  // Return the friendly model name (not the API model)
         output: result.logs,
         exit_code: result.metadata?.exit_code,
         duration_ms: result.metadata?.execution_time_ms || duration,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[CodeExecutionWorkflow] Sandbox execution error: ${errorMessage}`);
+      console.error(`[CodeExecutionWorkflow] Execution error: ${errorMessage}`);
       throw new Error(errorMessage);
     }
   }
@@ -564,11 +583,14 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
     const payload = {
       task_id: taskId,
       status: result.quarantine ? 'quarantined' : (result.success ? 'completed' : 'failed'),
-      executor: result.executor,
+      executor: result.executor,  // Specific model name (e.g., "claude-sonnet-4.5")
       output: result.output,
       error: result.error,
       duration_ms: result.duration_ms,
       timestamp: new Date().toISOString(),
+      // NEW: Waterfall metadata
+      waterfall_position: result.waterfall_position,
+      attempted_models: result.attempted_models,
     };
 
     const response = await fetch(callbackUrl, {

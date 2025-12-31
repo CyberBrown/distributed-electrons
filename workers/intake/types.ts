@@ -100,10 +100,18 @@ export interface IntakePayload {
   output?: OutputConfig;
   // Code execution specific fields
   repo_url?: string;
-  executor?: 'claude' | 'gemini';
+  executor?: 'claude' | 'gemini';  // DEPRECATED: Use model_waterfall or primary_model instead
   task_id?: string;
   prompt?: string;  // Alternative to query for code tasks
   timeout_ms?: number;  // Execution timeout in milliseconds (default: 300000)
+
+  // NEW: Model-specific routing (enhanced waterfall support)
+  model_waterfall?: string[];        // Ordered list of models to try (e.g., ["gemini-2.0-flash-exp", "claude-sonnet-4.5"])
+  primary_model?: string;            // Shorthand for single model preference (e.g., "claude-opus-4.5")
+
+  // NEW: Time-based priority overrides
+  override_until?: string;           // ISO timestamp - when the override expires
+  override_waterfall?: string[];     // Temporary waterfall order until override_until
 }
 
 // Response to client

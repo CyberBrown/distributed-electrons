@@ -79,6 +79,9 @@ QUEUE_DEPTH_THRESHOLD = "3"
 IMAGE_GEN_URL = "https://image-gen.solamp.workers.dev"
 # Audio generation worker URL
 AUDIO_GEN_URL = "https://audio-gen.solamp.workers.dev"
+# Default model waterfall for code execution (comma-separated model names)
+# Order: Claude Sonnet (balanced) → Gemini Flash (fast) → Claude Opus (powerful) → GLM-4 (local)
+DEFAULT_MODEL_WATERFALL = "claude-sonnet-4.5,gemini-2.0-flash-exp,claude-opus-4.5,glm-4-7b"
 
 # Secrets (set via wrangler secret put):
 # - SHOTSTACK_API_KEY

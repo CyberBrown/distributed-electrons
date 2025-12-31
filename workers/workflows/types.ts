@@ -177,8 +177,11 @@ export interface CodeExecutionParams {
   /** Optional repository URL to clone before execution */
   repo_url?: string;
 
-  /** Preferred executor: 'claude' (default) or 'gemini' */
+  /** DEPRECATED: Preferred executor: 'claude' (default) or 'gemini'. Use model_waterfall instead. */
   preferred_executor?: 'claude' | 'gemini';
+
+  /** NEW: Ordered list of models to try in sequence (e.g., ["gemini-2.0-flash-exp", "claude-sonnet-4.5"]) */
+  model_waterfall?: string[];
 
   /** Optional context to pass to the executor */
   context?: Record<string, unknown>;
@@ -207,12 +210,16 @@ export interface RunnerResponse {
 export interface ExecutionResult {
   success: boolean;
   task_id: string;
-  executor: 'claude' | 'gemini';
+  executor: string;  // Model name (e.g., "claude-sonnet-4.5", "gemini-2.0-flash-exp")
   output?: string;
   error?: string;
   exit_code?: number;
   quarantine?: boolean;
   duration_ms: number;
+  /** NEW: Which position in the waterfall succeeded (0-indexed) */
+  waterfall_position?: number;
+  /** NEW: All models that were attempted */
+  attempted_models?: string[];
 }
 
 /**
@@ -221,11 +228,15 @@ export interface ExecutionResult {
 export interface CodeExecutionCallbackPayload {
   task_id: string;
   status: 'completed' | 'failed' | 'quarantined';
-  executor: 'claude' | 'gemini';
+  executor: string;  // Model name (e.g., "claude-sonnet-4.5", "gemini-2.0-flash-exp")
   output?: string;
   error?: string;
   duration_ms: number;
   timestamp: string;
+  /** NEW: Which position in the waterfall succeeded (0-indexed) */
+  waterfall_position?: number;
+  /** NEW: All models that were attempted */
+  attempted_models?: string[];
 }
 
 // ============================================================================
@@ -592,6 +603,14 @@ export interface PrimeWorkflowParams {
 
   /** Overall timeout in milliseconds (default: 300000 = 5 min) */
   timeout_ms?: number;
+
+  /** NEW: Model-specific routing (for code execution tasks) */
+  model_waterfall?: string[];        // Ordered list of models to try
+  primary_model?: string;            // Shorthand for single model preference
+
+  /** NEW: Time-based priority overrides (for code execution tasks) */
+  override_until?: string;           // ISO timestamp
+  override_waterfall?: string[];     // Temporary waterfall order
 }
 
 /**
@@ -622,4 +641,7 @@ export interface PrimeEnv extends NexusEnv {
   VIDEO_RENDER_WORKFLOW: Workflow;
   IMAGE_GENERATION_WORKFLOW: Workflow;
   AUDIO_GENERATION_WORKFLOW: Workflow;
+
+  /** NEW: Default model waterfall configuration (comma-separated model names) */
+  DEFAULT_MODEL_WATERFALL?: string;
 }
