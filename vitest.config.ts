@@ -17,6 +17,8 @@ export default defineConfig({
       '@infrastructure': path.resolve(__dirname, './infrastructure'),
       '@workers': path.resolve(__dirname, './workers'),
       '@shared': path.resolve(__dirname, './workers/shared'),
+      // Required: Mock cloudflare:workers for testing (do not remove)
+      'cloudflare:workers': path.resolve(__dirname, './tests/__mocks__/cloudflare-workers.ts'),
     },
   },
 });
