@@ -259,6 +259,42 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
       }
     }
 
+    // Step 3.5: Validate result for false positives BEFORE reporting
+    // This ensures both reportToNexus and sendCallback get consistent status
+    // CRITICAL FIX: Previously, if reportToNexus detected a false positive and marked
+    // the task as failed, sendCallback would still send success=true because we were
+    // using the original result object. This caused race conditions and inconsistent states.
+    await step.do(
+      'validate-result',
+      {
+        retries: { limit: 1, delay: '1 second', backoff: 'constant' },
+        timeout: '5 seconds',
+      },
+      async () => {
+        if (result.success && result.output) {
+          // Check for failure indicators - AI reported success but output shows failure
+          const matchedIndicator = findFailureIndicator(result.output);
+          if (matchedIndicator) {
+            console.warn(`[CodeExecutionWorkflow] FALSE POSITIVE DETECTED: "${matchedIndicator}"`);
+            console.warn(`[CodeExecutionWorkflow] Output preview: ${result.output.substring(0, 300)}`);
+            // Update result object so both reportToNexus AND sendCallback see failure
+            result.success = false;
+            result.quarantine = true;
+            result.error = `FALSE_POSITIVE: AI reported success but output contains failure indicator: "${matchedIndicator}"`;
+          }
+
+          // Check minimum output length - very short outputs usually indicate errors
+          const outputLength = result.output.trim().length;
+          if (result.success && outputLength < 100) {
+            console.warn(`[CodeExecutionWorkflow] Output too short (${outputLength} chars), marking as failure`);
+            result.success = false;
+            result.error = `Output too short (${outputLength} chars) - likely indicates execution failure`;
+          }
+        }
+        return { validated: true };
+      }
+    );
+
     // Step 4: Report to Nexus
     const nexusReportResult = await step.do(
       'report-to-nexus',
@@ -287,6 +323,7 @@ export class CodeExecutionWorkflow extends WorkflowEntrypoint<NexusEnv, CodeExec
     console.log(`[CodeExecutionWorkflow] Nexus report: ${nexusReportResult.reported ? 'success' : 'failed'}`);
 
     // Step 5: Send callback if configured (best effort)
+    // Note: result.success has been validated in step 3.5, so callback will have correct status
     if (callback_url) {
       await step.do(
         'send-callback',
