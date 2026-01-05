@@ -24,6 +24,9 @@ const REPOS_DIR = '/repos';
 const NTFY_TOPIC = process.env.NTFY_TOPIC || 'nexus-oauth-expired';
 const NTFY_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
 
+// Default Claude model for code tasks - Sonnet 4.5 is optimized for coding
+const DEFAULT_CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929';
+
 /**
  * Deployment reminder that gets prepended to all task prompts.
  * Ensures tasks are not marked complete until code is deployed and verified.
@@ -359,7 +362,8 @@ async function executeClaude(
 
     // Build command parts
     // --dangerously-skip-permissions bypasses all permission checks (like Gemini's --yolo)
-    const cmdParts = ['claude', '-p', '--dangerously-skip-permissions', '--output-format', 'text'];
+    // --model specifies the Claude model to use (defaults to Sonnet 4.5 for coding tasks)
+    const cmdParts = ['claude', '-p', '--dangerously-skip-permissions', '--output-format', 'text', '--model', DEFAULT_CLAUDE_MODEL];
 
     if (allowedTools && allowedTools.length > 0) {
       cmdParts.push('--allowedTools', allowedTools.join(','));
