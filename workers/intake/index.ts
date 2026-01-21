@@ -50,7 +50,7 @@ const REPO_URL_PATTERNS = [
  * Classify request type based on content and explicit type
  * Returns 'code' if the request appears to be a code execution task
  */
-function classifyRequestType(body: IntakePayload): 'code' | 'video' | 'other' {
+function classifyRequestType(body: IntakePayload): 'code' | 'video' | 'product-shipping' | 'other' {
   // 1. Explicit task_type takes precedence
   if (body.task_type === 'code') {
     return 'code';
@@ -58,6 +58,10 @@ function classifyRequestType(body: IntakePayload): 'code' | 'video' | 'other' {
 
   if (body.task_type === 'video' || body.timeline) {
     return 'video';
+  }
+
+  if (body.task_type === 'product-shipping' || body.product) {
+    return 'product-shipping';
   }
 
   // 2. Check for repo_url field (strong signal for code task)
@@ -384,6 +388,74 @@ async function handleIntake(
 
         return createErrorResponse(
           error instanceof Error ? error.message : 'Failed to start code execution workflow',
+          'WORKFLOW_ERROR',
+          requestId,
+          500
+        );
+      }
+    }
+
+    // Check if this is a product shipping research request
+    if (requestType === 'product-shipping') {
+      if (!body.product) {
+        return createErrorResponse(
+          'Product info is required for product-shipping requests',
+          'MISSING_PRODUCT',
+          requestId,
+          400
+        );
+      }
+
+      console.log(`[INTAKE ${requestId}] Product shipping request, routing to ProductShippingResearchWorkflow`);
+
+      try {
+        // Create ProductShippingResearchWorkflow instance
+        const instance = await env.PRODUCT_SHIPPING_RESEARCH_WORKFLOW.create({
+          id: requestId,
+          params: {
+            request_id: requestId,
+            product: body.product,
+            callback_url: body.callback_url,
+            timeout_ms: body.timeout_ms || 120000,
+          },
+        });
+
+        // Update D1 with workflow tracking info
+        await env.DB.prepare(`
+          UPDATE requests SET
+            status = 'processing',
+            task_type = 'product-shipping',
+            workflow_instance_id = ?,
+            workflow_name = 'product-shipping-research-workflow',
+            started_at = ?
+          WHERE id = ?
+        `).bind(instance.id, now, requestId).run();
+
+        // Return success with workflow info
+        return Response.json({
+          success: true,
+          request_id: requestId,
+          status: 'processing',
+          workflow_instance_id: instance.id,
+          workflow_name: 'product-shipping-research-workflow',
+          message: 'Product shipping research workflow started',
+        } as IntakeResponse, {
+          status: 202,
+          headers: { 'X-Request-ID': requestId },
+        });
+      } catch (error) {
+        console.error('Failed to start ProductShippingResearchWorkflow:', error);
+
+        // Update D1 with error
+        await env.DB.prepare(`
+          UPDATE requests SET status = 'failed', error_message = ? WHERE id = ?
+        `).bind(
+          error instanceof Error ? error.message : 'Workflow creation failed',
+          requestId
+        ).run();
+
+        return createErrorResponse(
+          error instanceof Error ? error.message : 'Failed to start product shipping research workflow',
           'WORKFLOW_ERROR',
           requestId,
           500

@@ -11,6 +11,7 @@ export interface Env {
   // Cloudflare Workflows
   VIDEO_RENDER_WORKFLOW: Workflow;
   CODE_EXECUTION_WORKFLOW: Workflow;
+  PRODUCT_SHIPPING_RESEARCH_WORKFLOW: Workflow;
 
   // D1 Database
   DB: D1Database;
@@ -89,7 +90,7 @@ export interface IntakePayload {
   query: string;
   app_id?: string;
   instance_id?: string;
-  task_type?: 'text' | 'image' | 'audio' | 'video' | 'code' | 'context';
+  task_type?: 'text' | 'image' | 'audio' | 'video' | 'code' | 'context' | 'product-shipping';
   provider?: string;
   model?: string;
   priority?: number;
@@ -104,6 +105,15 @@ export interface IntakePayload {
   task_id?: string;
   prompt?: string;  // Alternative to query for code tasks
   timeout_ms?: number;  // Execution timeout in milliseconds (default: 300000)
+
+  // Product shipping research specific fields
+  product?: {
+    sku: string;
+    name: string;
+    brand?: string;
+    description?: string;
+    image_urls?: string[];
+  };
 
   // NEW: Model-specific routing (enhanced waterfall support)
   model_waterfall?: string[];        // Ordered list of models to try (e.g., ["gemini-2.0-flash-exp", "claude-sonnet-4.5"])

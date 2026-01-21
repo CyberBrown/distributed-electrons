@@ -40,6 +40,13 @@ binding = "CODE_EXECUTION_WORKFLOW"
 class_name = "CodeExecutionWorkflow"
 script_name = "de-workflows"
 
+# ProductShippingResearchWorkflow (Cloudflare Workflow for product research)
+[[workflows]]
+name = "product-shipping-research-workflow"
+binding = "PRODUCT_SHIPPING_RESEARCH_WORKFLOW"
+class_name = "ProductShippingResearchWorkflow"
+script_name = "de-workflows"
+
 # Environment Variables
 [vars]
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
