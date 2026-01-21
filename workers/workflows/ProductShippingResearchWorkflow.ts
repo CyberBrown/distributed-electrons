@@ -1,14 +1,12 @@
 /**
  * ProductShippingResearchWorkflow
  *
- * Cloudflare Workflow for researching product shipping dimensions using Gemini CLI.
+ * Cloudflare Workflow for researching product shipping dimensions using z.ai.
  * This workflow:
  * 1. Takes product information (SKU, name, description, brand)
- * 2. Sends to Gemini CLI with web search capability
+ * 2. Calls z.ai API (GLM model with web search capability)
  * 3. Parses the JSON response for shipping dimensions
  * 4. Returns structured shipping data
- *
- * Routes ONLY to Gemini CLI (no fallback) because web search is required.
  */
 
 import { WorkflowEntrypoint, WorkflowStep, type WorkflowEvent } from 'cloudflare:workers';
@@ -20,14 +18,43 @@ import type {
   ProductInfo,
 } from './types';
 
-const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini-runner.shiftaltcreate.com';
+// z.ai API configuration
+const ZAI_API_URL = 'https://api.z.ai/api/paas/v4/chat/completions';
+const ZAI_MODEL = 'GLM-4-32B-0414';
 
 /**
- * Build the Gemini prompt for shipping research
+ * Build the system prompt for shipping research
  */
-function buildShippingResearchPrompt(product: ProductInfo): string {
+function buildSystemPrompt(): string {
+  return `You are a product research assistant specializing in finding shipping dimensions.
+Your task is to search the web and find accurate shipping dimensions for products.
+
+IMPORTANT GUIDELINES:
+- Look for SHIPPING dimensions (boxed/packaged), not just product dimensions
+- If only product dimensions are available, add 10-15% for packaging
+- Verify the product name/SKU matches before using specs
+- If you cannot find reliable specs, make a reasonable estimate based on similar products
+- Always cite your source
+
+You MUST respond with ONLY a valid JSON object in this exact format:
+{
+  "shipping_weight": <number in lbs>,
+  "shipping_length": <number in inches>,
+  "shipping_width": <number in inches>,
+  "shipping_height": <number in inches>,
+  "source": "<URL where found or 'estimated'>",
+  "confidence": "<high|medium|low>"
+}
+
+No other text, explanations, or markdown - just the raw JSON object.`;
+}
+
+/**
+ * Build the user prompt for shipping research
+ */
+function buildUserPrompt(product: ProductInfo): string {
   const parts: string[] = [
-    'You are a product research assistant. Find the shipping dimensions for this product:',
+    'Find the shipping dimensions for this product:',
     '',
   ];
 
@@ -39,36 +66,15 @@ function buildShippingResearchPrompt(product: ProductInfo): string {
   if (product.description) {
     parts.push(`Description: ${product.description}`);
   }
-  if (product.image_urls && product.image_urls.length > 0) {
-    parts.push(`Reference Images: ${product.image_urls.join(', ')}`);
-  }
 
   parts.push('');
-  parts.push('Search online for the manufacturer specs, distributor listings, or retail sites that list shipping dimensions.');
-  parts.push('');
-  parts.push('IMPORTANT:');
-  parts.push('- Look for SHIPPING dimensions (boxed/packaged), not just product dimensions');
-  parts.push('- If only product dimensions are available, add 10-15% for packaging');
-  parts.push('- Verify the product name/SKU matches before using specs');
-  parts.push('- If you cannot find reliable specs, make a reasonable estimate based on similar products');
-  parts.push('');
-  parts.push('Return ONLY a JSON object with these fields:');
-  parts.push('{');
-  parts.push('  "shipping_weight": <number in lbs>,');
-  parts.push('  "shipping_length": <number in inches>,');
-  parts.push('  "shipping_width": <number in inches>,');
-  parts.push('  "shipping_height": <number in inches>,');
-  parts.push('  "source": "<URL where found or \'estimated\'>",');
-  parts.push('  "confidence": "<high|medium|low>"');
-  parts.push('}');
-  parts.push('');
-  parts.push('No other text, just the JSON.');
+  parts.push('Search online for manufacturer specs, distributor listings, or retail sites.');
 
   return parts.join('\n');
 }
 
 /**
- * Parse shipping data from Gemini response
+ * Parse shipping data from z.ai response
  * Handles various JSON formats and extracts the shipping data
  */
 function parseShippingData(response: string): ShippingData | null {
@@ -179,36 +185,36 @@ export class ProductShippingResearchWorkflow extends WorkflowEntrypoint<
       return result;
     }
 
-    // Step 2: Call Gemini runner for shipping research
+    // Step 2: Call z.ai for shipping research
     let shippingData: ShippingData | null = null;
     let error: string | undefined;
 
     try {
-      const geminiResult = await step.do(
+      const zaiResult = await step.do(
         'research-shipping',
         {
           retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' },
           timeout: `${Math.ceil(timeout_ms / 1000)} seconds`,
         },
         async () => {
-          return this.callGeminiRunner(product);
+          return this.callZAI(product);
         }
       );
 
-      if (geminiResult.success && geminiResult.output) {
-        console.log(`[ProductShippingResearch] Gemini response received, parsing...`);
-        shippingData = parseShippingData(geminiResult.output);
+      if (zaiResult.success && zaiResult.output) {
+        console.log(`[ProductShippingResearch] z.ai response received, parsing...`);
+        shippingData = parseShippingData(zaiResult.output);
 
         if (!shippingData) {
-          error = 'Failed to parse shipping data from Gemini response';
-          console.log(`[ProductShippingResearch] Raw response: ${geminiResult.output.substring(0, 500)}`);
+          error = 'Failed to parse shipping data from z.ai response';
+          console.log(`[ProductShippingResearch] Raw response: ${zaiResult.output.substring(0, 500)}`);
         }
       } else {
-        error = geminiResult.error || 'Gemini runner failed';
+        error = zaiResult.error || 'z.ai API call failed';
       }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
-      console.error(`[ProductShippingResearch] Gemini call failed: ${error}`);
+      console.error(`[ProductShippingResearch] z.ai call failed: ${error}`);
     }
 
     // Build result
@@ -270,62 +276,92 @@ export class ProductShippingResearchWorkflow extends WorkflowEntrypoint<
   }
 
   /**
-   * Call Gemini runner for shipping research
+   * Call z.ai API for shipping research
    */
-  private async callGeminiRunner(
+  private async callZAI(
     product: ProductInfo
   ): Promise<{ success: boolean; output?: string; error?: string }> {
-    const url = this.env.GEMINI_RUNNER_URL || DEFAULT_GEMINI_RUNNER_URL;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (this.env.GEMINI_RUNNER_SECRET) {
-      headers['X-Runner-Secret'] = this.env.GEMINI_RUNNER_SECRET;
-    }
-    if (this.env.CF_ACCESS_CLIENT_ID && this.env.CF_ACCESS_CLIENT_SECRET) {
-      headers['CF-Access-Client-Id'] = this.env.CF_ACCESS_CLIENT_ID;
-      headers['CF-Access-Client-Secret'] = this.env.CF_ACCESS_CLIENT_SECRET;
-    }
-
-    const prompt = buildShippingResearchPrompt(product);
-    console.log(`[ProductShippingResearch] Sending prompt to Gemini runner...`);
-
-    const response = await fetch(`${url}/execute`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        prompt: prompt,
-        timeout_ms: 120000, // 2 minutes for web search
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[ProductShippingResearch] Gemini runner HTTP error: ${response.status}`);
+    if (!this.env.ZAI_API_KEY) {
       return {
         success: false,
-        error: `Gemini runner error (${response.status}): ${errorText}`,
+        error: 'ZAI_API_KEY not configured',
       };
     }
 
-    const data = (await response.json()) as {
-      success: boolean;
-      output?: string;
-      error?: string;
-    };
+    const systemPrompt = buildSystemPrompt();
+    const userPrompt = buildUserPrompt(product);
 
-    if (!data.success) {
+    console.log(`[ProductShippingResearch] Calling z.ai API...`);
+
+    try {
+      const response = await fetch(ZAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.env.ZAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: ZAI_MODEL,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.2,
+          max_tokens: 500,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[ProductShippingResearch] z.ai API HTTP error: ${response.status}`);
+        return {
+          success: false,
+          error: `z.ai API error (${response.status}): ${errorText}`,
+        };
+      }
+
+      const data = (await response.json()) as {
+        choices?: Array<{
+          message?: {
+            content?: string;
+            reasoning_content?: string; // z.ai may return content here
+          };
+        }>;
+        error?: {
+          message?: string;
+        };
+      };
+
+      if (data.error) {
+        return {
+          success: false,
+          error: data.error.message || 'z.ai API error',
+        };
+      }
+
+      // z.ai may return content in 'content' or 'reasoning_content' field
+      const message = data.choices?.[0]?.message;
+      const content = message?.content || message?.reasoning_content;
+
+      if (!content) {
+        return {
+          success: false,
+          error: 'No content in z.ai response',
+        };
+      }
+
+      return {
+        success: true,
+        output: content,
+      };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[ProductShippingResearch] z.ai fetch error: ${errorMsg}`);
       return {
         success: false,
-        error: data.error || 'Gemini runner failed',
+        error: `z.ai request failed: ${errorMsg}`,
       };
     }
-
-    return {
-      success: true,
-      output: data.output,
-    };
   }
 
   /**

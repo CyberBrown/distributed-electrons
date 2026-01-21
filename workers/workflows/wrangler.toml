@@ -50,7 +50,7 @@ binding = "AUDIO_GENERATION_WORKFLOW"
 class_name = "AudioGenerationWorkflow"
 
 # ProductShippingResearchWorkflow - researches product shipping dimensions
-# Uses: Gemini CLI with web search (no fallback - requires web search)
+# Uses: z.ai GLM model for product research
 [[workflows]]
 name = "product-shipping-research-workflow"
 binding = "PRODUCT_SHIPPING_RESEARCH_WORKFLOW"

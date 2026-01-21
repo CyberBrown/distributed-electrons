@@ -727,15 +727,8 @@ export interface ProductShippingResearchResult {
  * Environment bindings for ProductShippingResearchWorkflow
  */
 export interface ProductShippingResearchEnv {
-  /** Gemini runner URL (on-prem via Cloudflare Tunnel) */
-  GEMINI_RUNNER_URL?: string;
-
-  /** Gemini runner authentication secret */
-  GEMINI_RUNNER_SECRET?: string;
-
-  /** Cloudflare Access credentials for protected runners */
-  CF_ACCESS_CLIENT_ID?: string;
-  CF_ACCESS_CLIENT_SECRET?: string;
+  /** z.ai API key for GLM model */
+  ZAI_API_KEY?: string;
 
   /** Nexus passphrase for callbacks */
   NEXUS_PASSPHRASE?: string;
