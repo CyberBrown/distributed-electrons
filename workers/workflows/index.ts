@@ -11,6 +11,7 @@ export { TextGenerationWorkflow } from './TextGenerationWorkflow';
 export { PrimeWorkflow } from './PrimeWorkflow';
 export { ImageGenerationWorkflow } from './ImageGenerationWorkflow';
 export { AudioGenerationWorkflow } from './AudioGenerationWorkflow';
+export { ProductShippingResearchWorkflow } from './ProductShippingResearchWorkflow';
 
 // Workflow binding type
 interface Workflow {
@@ -34,6 +35,7 @@ interface Env {
   PRIME_WORKFLOW: Workflow;
   IMAGE_GENERATION_WORKFLOW: Workflow;
   AUDIO_GENERATION_WORKFLOW: Workflow;
+  PRODUCT_SHIPPING_RESEARCH_WORKFLOW: Workflow;
   // Auth secret for external trigger requests
   NEXUS_PASSPHRASE?: string;
 }
@@ -56,6 +58,7 @@ export default {
           'text-generation-workflow',
           'image-generation-workflow',
           'audio-generation-workflow',
+          'product-shipping-research-workflow',
         ],
         timestamp: new Date().toISOString(),
       });
@@ -381,6 +384,41 @@ export default {
       }
     }
 
+    // POST /workflows/product-shipping-research - LOCKED DOWN
+    // Direct workflow access is disabled. Use POST /execute instead.
+    if (url.pathname === '/workflows/product-shipping-research' && request.method === 'POST') {
+      return Response.json({
+        error: 'Direct workflow access disabled. Use POST /execute instead.',
+        code: 'USE_EXECUTE_ENDPOINT',
+      }, { status: 403 });
+    }
+
+    // GET /workflows/product-shipping-research/:id - Get workflow status
+    if (url.pathname.startsWith('/workflows/product-shipping-research/') && request.method === 'GET') {
+      try {
+        const workflowId = url.pathname.replace('/workflows/product-shipping-research/', '');
+        if (!workflowId) {
+          return Response.json({ error: 'Missing workflow ID' }, { status: 400 });
+        }
+
+        const instance = await env.PRODUCT_SHIPPING_RESEARCH_WORKFLOW.get(workflowId);
+        const status = await instance.status();
+
+        return Response.json({
+          success: true,
+          workflow_id: workflowId,
+          status: status.status,
+          output: status.output,
+          error: status.error,
+        });
+      } catch (error: any) {
+        return Response.json({
+          success: false,
+          error: error.message || 'Failed to get workflow status',
+        }, { status: 500 });
+      }
+    }
+
     return Response.json({
       error: 'Not found',
       available_endpoints: [
@@ -392,6 +430,7 @@ export default {
         'GET /workflows/text-generation/:id (status only)',
         'GET /workflows/image-generation/:id (status only)',
         'GET /workflows/audio-generation/:id (status only)',
+        'GET /workflows/product-shipping-research/:id (status only)',
       ],
     }, { status: 404 });
   },

@@ -418,8 +418,18 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
       console.log('[PrimeWorkflow] Classification: audio (hint)');
       return 'audio';
     }
+    if (hints?.workflow === 'product-shipping-research') {
+      console.log('[PrimeWorkflow] Classification: product-shipping-research (hint)');
+      return 'product-shipping-research';
+    }
 
-    // 5. Default to text (safer, cheaper, faster)
+    // 5. Check for product shipping research context signal
+    if (context?.product) {
+      console.log('[PrimeWorkflow] Classification: product-shipping-research (context.product present)');
+      return 'product-shipping-research';
+    }
+
+    // 6. Default to text (safer, cheaper, faster)
     console.log('[PrimeWorkflow] Classification: text (default)');
     return 'text';
   }
@@ -517,6 +527,21 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
             text: params.description || params.title,
             voice_id: params.hints?.model,
             callback_url: params.callback_url,
+          },
+        });
+        break;
+
+      case 'product-shipping-research':
+        if (!params.context?.product) {
+          throw new Error('Product shipping research requires product context');
+        }
+        instance = await this.env.PRODUCT_SHIPPING_RESEARCH_WORKFLOW.create({
+          id: workflowId,
+          params: {
+            request_id: params.task_id,
+            product: params.context.product,
+            callback_url: params.callback_url,
+            timeout_ms: params.timeout_ms,
           },
         });
         break;

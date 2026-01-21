@@ -534,7 +534,7 @@ export interface AudioGenEnv extends NexusEnv {
 /**
  * Task type classification for routing
  */
-export type TaskType = 'code' | 'text' | 'video' | 'image' | 'audio';
+export type TaskType = 'code' | 'text' | 'video' | 'image' | 'audio' | 'product-shipping-research';
 
 /**
  * Workflow binding type (for Cloudflare Workflows)
@@ -586,12 +586,20 @@ export interface PrimeWorkflowParams {
     energy_required?: string;
     /** Parent idea if from Nexus idea execution */
     parent_idea?: object;
+    /** Product info for shipping research */
+    product?: {
+      sku: string;
+      name: string;
+      description?: string;
+      brand?: string;
+      image_urls?: string[];
+    };
   };
 
   /** Hints from the caller - suggestions only, DE decides */
   hints?: {
     /** Suggested workflow type */
-    workflow?: 'code-execution' | 'text-generation' | 'video-render' | 'image-generation' | 'audio-generation';
+    workflow?: 'code-execution' | 'text-generation' | 'video-render' | 'image-generation' | 'audio-generation' | 'product-shipping-research';
     /** Suggested provider (e.g., 'claude', 'gemini', 'ideogram', 'elevenlabs') */
     provider?: string;
     /** Suggested model (e.g., 'claude-3-opus', 'ideogram-v2') */
@@ -641,7 +649,94 @@ export interface PrimeEnv extends NexusEnv {
   VIDEO_RENDER_WORKFLOW: Workflow;
   IMAGE_GENERATION_WORKFLOW: Workflow;
   AUDIO_GENERATION_WORKFLOW: Workflow;
+  PRODUCT_SHIPPING_RESEARCH_WORKFLOW: Workflow;
+}
 
-  /** NEW: Default model waterfall configuration (comma-separated model names) */
-  DEFAULT_MODEL_WATERFALL?: string;
+// ============================================================================
+// Product Shipping Research Workflow Types
+// ============================================================================
+
+/**
+ * Product information for shipping research
+ */
+export interface ProductInfo {
+  /** Product SKU */
+  sku: string;
+  /** Product name */
+  name: string;
+  /** Optional product description */
+  description?: string;
+  /** Optional brand/manufacturer */
+  brand?: string;
+  /** Optional image URLs for visual reference */
+  image_urls?: string[];
+}
+
+/**
+ * Shipping dimensions data
+ */
+export interface ShippingData {
+  /** Weight in pounds */
+  shipping_weight: number;
+  /** Length in inches */
+  shipping_length: number;
+  /** Width in inches */
+  shipping_width: number;
+  /** Height in inches */
+  shipping_height: number;
+  /** Source URL or "estimated" */
+  source: string;
+  /** Confidence level of the data */
+  confidence: 'high' | 'medium' | 'low';
+}
+
+/**
+ * Parameters for ProductShippingResearchWorkflow
+ */
+export interface ProductShippingResearchParams {
+  /** Unique request identifier */
+  request_id: string;
+
+  /** Product information to research */
+  product: ProductInfo;
+
+  /** Optional callback URL for completion notification */
+  callback_url?: string;
+
+  /** Execution timeout in milliseconds (default: 120000 = 2 minutes) */
+  timeout_ms?: number;
+}
+
+/**
+ * Result from product shipping research
+ */
+export interface ProductShippingResearchResult {
+  /** Whether the research was successful */
+  success: boolean;
+  /** Product SKU that was researched */
+  sku: string;
+  /** Shipping dimensions data (if found) */
+  shipping_data?: ShippingData;
+  /** Error message if failed */
+  error?: string;
+  /** Duration of the research in milliseconds */
+  duration_ms: number;
+}
+
+/**
+ * Environment bindings for ProductShippingResearchWorkflow
+ */
+export interface ProductShippingResearchEnv {
+  /** Gemini runner URL (on-prem via Cloudflare Tunnel) */
+  GEMINI_RUNNER_URL?: string;
+
+  /** Gemini runner authentication secret */
+  GEMINI_RUNNER_SECRET?: string;
+
+  /** Cloudflare Access credentials for protected runners */
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+
+  /** Nexus passphrase for callbacks */
+  NEXUS_PASSPHRASE?: string;
 }
