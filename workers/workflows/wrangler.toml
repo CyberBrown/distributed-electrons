@@ -82,6 +82,8 @@ NEXUS_API_URL = "https://nexus-mcp.solamp.workers.dev"
 SPARK_VLLM_URL = "https://vllm.shiftaltcreate.com"
 # Queue depth threshold - skip runners if more tasks are queued (default: 3)
 QUEUE_DEPTH_THRESHOLD = "3"
+# AI Gateway for routing LLM calls (BYOK keys managed in Gateway)
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway"
 # Image generation worker URL
 IMAGE_GEN_URL = "https://image-gen.solamp.workers.dev"
 # Audio generation worker URL
