@@ -15,6 +15,8 @@ services:
       # Logs
       - ./logs:/app/logs:rw
     environment:
+      #CF
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
       # Required: Secret for authenticating requests from sandbox-executor
       - RUNNER_SECRET=${RUNNER_SECRET}
       # Optional: GitHub PAT for cloning private repos

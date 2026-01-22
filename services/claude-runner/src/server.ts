@@ -45,6 +45,11 @@ A task is NOT complete until the changes are live and verified.
 
 `;
 
+// Add before the docker run args
+if (process.env.CLOUDFLARE_API_TOKEN) {
+  dockerArgs.push('-e', `CLOUDFLARE_API_TOKEN=${process.env.CLOUDFLARE_API_TOKEN}`);
+}
+
 // Auth failure tracking
 interface AuthFailureState {
   lastFailureTime: string | null;
