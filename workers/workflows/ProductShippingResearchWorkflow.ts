@@ -18,9 +18,9 @@ import type {
   ProductInfo,
 } from './types';
 
-// z.ai via AI Gateway configuration
-const DEFAULT_AI_GATEWAY_URL = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway';
-const ZAI_MODEL = 'GLM-4-32B-0414';
+// z.ai direct API
+const ZAI_API_URL = 'https://api.z.ai/api/paas/v4/chat/completions';
+const ZAI_MODEL = 'glm-4-plus';
 
 /**
  * Build the system prompt for shipping research
@@ -276,31 +276,29 @@ export class ProductShippingResearchWorkflow extends WorkflowEntrypoint<
   }
 
   /**
-   * Call z.ai via AI Gateway for shipping research
+   * Call z.ai direct API for shipping research
    */
   private async callZAI(
     product: ProductInfo
   ): Promise<{ success: boolean; output?: string; error?: string }> {
-    if (!this.env.CF_AIG_TOKEN) {
+    if (!this.env.ZAI_API_KEY) {
       return {
         success: false,
-        error: 'CF_AIG_TOKEN not configured',
+        error: 'ZAI_API_KEY not configured',
       };
     }
 
-    const gatewayUrl = this.env.AI_GATEWAY_URL || DEFAULT_AI_GATEWAY_URL;
     const systemPrompt = buildSystemPrompt();
     const userPrompt = buildUserPrompt(product);
 
-    console.log(`[ProductShippingResearch] Calling z.ai via AI Gateway...`);
+    console.log(`[ProductShippingResearch] Calling z.ai API directly...`);
 
     try {
-      // Route through AI Gateway - z.ai custom provider
-      const response = await fetch(`${gatewayUrl}/zai/v4/chat/completions`, {
+      const response = await fetch(ZAI_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'cf-aig-token': this.env.CF_AIG_TOKEN,
+          'Authorization': `Bearer ${this.env.ZAI_API_KEY}`,
         },
         body: JSON.stringify({
           model: ZAI_MODEL,

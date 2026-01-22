@@ -727,11 +727,8 @@ export interface ProductShippingResearchResult {
  * Environment bindings for ProductShippingResearchWorkflow
  */
 export interface ProductShippingResearchEnv {
-  /** AI Gateway URL for routing LLM calls */
-  AI_GATEWAY_URL?: string;
-
-  /** Cloudflare AI Gateway token (BYOK keys managed in Gateway) */
-  CF_AIG_TOKEN?: string;
+  /** z.ai API key for direct API calls */
+  ZAI_API_KEY?: string;
 
   /** Nexus passphrase for callbacks */
   NEXUS_PASSPHRASE?: string;
