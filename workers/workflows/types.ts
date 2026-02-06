@@ -642,6 +642,9 @@ export interface PrimeEnv extends NexusEnv {
   /** DE Workflows worker URL (for triggering sub-workflows) */
   DE_WORKFLOWS_URL?: string;
 
+  /** Default model waterfall configuration (comma-separated model IDs) */
+  DEFAULT_MODEL_WATERFALL?: string;
+
   /** Workflow bindings */
   PRIME_WORKFLOW: Workflow;
   CODE_EXECUTION_WORKFLOW: Workflow;

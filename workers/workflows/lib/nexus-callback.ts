@@ -198,14 +198,6 @@ function findFailureIndicator(output: string | undefined): string | null {
   return null;
 }
 
-/**
- * Check if the output contains failure indicators suggesting the AI didn't actually complete the task.
- * This prevents false positive completions where the AI says "I couldn't find X" but reports success.
- */
-function containsFailureIndicators(output: string | undefined): boolean {
-  return findFailureIndicator(output) !== null;
-}
-
 /** Default Nexus API URL */
 const DEFAULT_NEXUS_URL = 'https://nexus-mcp.solamp.workers.dev';
 
