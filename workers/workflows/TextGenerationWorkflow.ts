@@ -677,7 +677,7 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
       apiKey: this.env.ANTHROPIC_API_KEY,
       headers: { 'anthropic-version': '2023-06-01' },
       body: {
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: params.max_tokens,
         system: params.system_prompt,
         messages: [{ role: 'user', content: params.prompt }],
@@ -718,8 +718,8 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     // Google uses query-param auth in direct mode (no gateway)
     const useGateway = !!this.env.CF_AIG_TOKEN;
     const path = useGateway
-      ? '/v1beta/models/gemini-1.5-flash:generateContent'
-      : `/v1beta/models/gemini-1.5-flash:generateContent?key=${this.env.GEMINI_API_KEY}`;
+      ? '/v1beta/models/gemini-3-flash-preview:generateContent'
+      : `/v1beta/models/gemini-3-flash-preview:generateContent?key=${this.env.GEMINI_API_KEY}`;
 
     const response = await callViaGateway(this.getGatewayConfig(), {
       provider: 'google-ai-studio',
