@@ -326,6 +326,9 @@ export interface TextGenerationEnv {
   /** Nemotron/Spark vLLM URL */
   SPARK_VLLM_URL?: string;
 
+  /** Cloudflare AI Gateway base URL */
+  AI_GATEWAY_URL?: string;
+
   /** Cloudflare AI Gateway token - when set, routes API calls through Gateway */
   CF_AIG_TOKEN?: string;
 

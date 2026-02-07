@@ -24,6 +24,7 @@ import type {
   TextProvider,
   ProviderStatus,
 } from './types';
+import { callViaGateway, type GatewayConfig } from './lib/gateway-client';
 
 /**
  * Failure indicators that suggest the AI reported success but didn't actually complete the task.
@@ -125,12 +126,6 @@ function containsFailureIndicators(text: string | undefined): boolean {
 const DEFAULT_SPARK_VLLM_URL = 'https://vllm.shiftaltcreate.com';
 const DEFAULT_CLAUDE_RUNNER_URL = 'https://claude-runner.shiftaltcreate.com';
 const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini-runner.shiftaltcreate.com';
-
-// AI Gateway URLs - all API calls route through Cloudflare AI Gateway
-const AI_GATEWAY_BASE = 'https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a429e63261/de-gateway';
-const GATEWAY_ANTHROPIC_URL = `${AI_GATEWAY_BASE}/anthropic`;
-const GATEWAY_OPENAI_URL = `${AI_GATEWAY_BASE}/openai`;
-const GATEWAY_GOOGLE_URL = `${AI_GATEWAY_BASE}/google-ai-studio`;
 
 // Queue depth threshold - skip runners if more than this many tasks queued
 const DEFAULT_QUEUE_THRESHOLD = 3;
@@ -434,6 +429,14 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     }
   }
 
+  /** Build GatewayConfig from environment */
+  private getGatewayConfig(): GatewayConfig {
+    return {
+      gatewayBaseUrl: this.env.AI_GATEWAY_URL || '',
+      cfAigToken: this.env.CF_AIG_TOKEN,
+    };
+  }
+
   /**
    * Call a specific provider
    */
@@ -668,32 +671,17 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     max_tokens: number;
     temperature: number;
   }): Promise<{ text: string; tokens_used?: number }> {
-    // Route through AI Gateway when token is available
-    const useGateway = !!this.env.CF_AIG_TOKEN;
-    const url = useGateway
-      ? `${GATEWAY_ANTHROPIC_URL}/v1/messages`
-      : 'https://api.anthropic.com/v1/messages';
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-    };
-
-    if (useGateway) {
-      headers['cf-aig-authorization'] = `Bearer ${this.env.CF_AIG_TOKEN}`;
-    } else {
-      headers['x-api-key'] = this.env.ANTHROPIC_API_KEY!;
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
+    const response = await callViaGateway(this.getGatewayConfig(), {
+      provider: 'anthropic',
+      path: '/v1/messages',
+      apiKey: this.env.ANTHROPIC_API_KEY,
+      headers: { 'anthropic-version': '2023-06-01' },
+      body: {
         model: 'claude-3-5-sonnet-20241022',
         max_tokens: params.max_tokens,
         system: params.system_prompt,
         messages: [{ role: 'user', content: params.prompt }],
-      }),
+      },
     });
 
     if (!response.ok) {
@@ -727,30 +715,22 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
       ? `${params.system_prompt}\n\n${params.prompt}`
       : params.prompt;
 
-    // Route through AI Gateway when token is available
+    // Google uses query-param auth in direct mode (no gateway)
     const useGateway = !!this.env.CF_AIG_TOKEN;
-    const url = useGateway
-      ? `${GATEWAY_GOOGLE_URL}/v1beta/models/gemini-1.5-flash:generateContent`
-      : `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.env.GEMINI_API_KEY}`;
+    const path = useGateway
+      ? '/v1beta/models/gemini-1.5-flash:generateContent'
+      : `/v1beta/models/gemini-1.5-flash:generateContent?key=${this.env.GEMINI_API_KEY}`;
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (useGateway) {
-      headers['cf-aig-authorization'] = `Bearer ${this.env.CF_AIG_TOKEN}`;
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
+    const response = await callViaGateway(this.getGatewayConfig(), {
+      provider: 'google-ai-studio',
+      path,
+      body: {
         contents: [{ parts: [{ text: fullPrompt }] }],
         generationConfig: {
           maxOutputTokens: params.max_tokens,
           temperature: params.temperature,
         },
-      }),
+      },
     });
 
     if (!response.ok) {
@@ -786,31 +766,16 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     }
     messages.push({ role: 'user', content: params.prompt });
 
-    // Route through AI Gateway when token is available
-    const useGateway = !!this.env.CF_AIG_TOKEN;
-    const url = useGateway
-      ? `${GATEWAY_OPENAI_URL}/v1/chat/completions`
-      : 'https://api.openai.com/v1/chat/completions';
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (useGateway) {
-      headers['cf-aig-authorization'] = `Bearer ${this.env.CF_AIG_TOKEN}`;
-    } else {
-      headers['Authorization'] = `Bearer ${this.env.OPENAI_API_KEY}`;
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
+    const response = await callViaGateway(this.getGatewayConfig(), {
+      provider: 'openai',
+      path: '/v1/chat/completions',
+      apiKey: this.env.OPENAI_API_KEY,
+      body: {
         model: 'gpt-4o-mini',
         messages,
         max_tokens: params.max_tokens,
         temperature: params.temperature,
-      }),
+      },
     });
 
     if (!response.ok) {
