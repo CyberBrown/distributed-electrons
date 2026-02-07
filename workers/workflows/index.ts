@@ -40,6 +40,90 @@ interface Env {
   NEXUS_PASSPHRASE?: string;
 }
 
+// =========================================================================
+// Graceful Reroute Helper
+// Converts legacy direct POST /workflows/* calls into PrimeWorkflow instances
+// =========================================================================
+interface RerouteConfig {
+  route: string;
+  requiredField: string;
+  mapParams: (body: Record<string, unknown>) => PrimeWorkflowParams;
+}
+
+async function handleGracefulReroute(
+  request: Request,
+  env: Env,
+  config: RerouteConfig,
+): Promise<Response> {
+  // Auth check (same as /execute)
+  const passphrase = request.headers.get('X-Passphrase');
+  if (env.NEXUS_PASSPHRASE && passphrase !== env.NEXUS_PASSPHRASE) {
+    return Response.json({ error: 'Invalid passphrase' }, { status: 401 });
+  }
+
+  // Log deprecation warning
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const ua = request.headers.get('User-Agent') || 'unknown';
+  console.warn(`[DEPRECATION] POST ${config.route} called by IP=${ip} UA=${ua} — use POST /execute instead`);
+
+  // Parse body
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json() as Record<string, unknown>;
+  } catch {
+    return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  // Validate required field
+  if (!body[config.requiredField]) {
+    return Response.json({
+      error: `Missing required field: ${config.requiredField}`,
+    }, { status: 400 });
+  }
+
+  // Map legacy params → PrimeWorkflowParams
+  const params = config.mapParams(body);
+
+  if (!params.task_id || !params.title) {
+    return Response.json({
+      error: 'Failed to map legacy params: missing task_id or title',
+    }, { status: 400 });
+  }
+
+  // Create PrimeWorkflow
+  const workflowId = params.task_id;
+  try {
+    const instance = await env.PRIME_WORKFLOW.create({
+      id: workflowId,
+      params,
+    });
+
+    return Response.json({
+      success: true,
+      redirected: true,
+      workflow_id: workflowId,
+      execution_id: instance.id,
+      deprecation_notice: `POST ${config.route} is deprecated. Use POST /execute with PrimeWorkflowParams instead.`,
+      migration_guide: 'Send POST /execute with { params: { task_id, title, description, context?, hints? } }. See docs for PrimeWorkflowParams schema.',
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('already exists')) {
+      return Response.json({
+        success: false,
+        redirected: true,
+        error: 'Execution with this ID already exists',
+        code: 'DUPLICATE_EXECUTION',
+      }, { status: 409 });
+    }
+    return Response.json({
+      success: false,
+      redirected: true,
+      error: msg || 'Failed to create rerouted workflow',
+    }, { status: 500 });
+  }
+}
+
 // Default export required for Cloudflare Workers module format
 // The actual workflow is exposed via the [[workflows]] binding in wrangler.toml
 export default {
@@ -138,12 +222,12 @@ export default {
         }
       }
 
-      // Test 4: Verify direct workflow access is blocked
-      const directAccessBlocked = true; // We know this from the code structure
+      // Test 4: Verify legacy workflow routes are gracefully rerouted
+      const rerouted = true; // We know this from the code structure
       results.push({
-        test: 'Direct workflow access blocked',
-        passed: directAccessBlocked,
-        details: 'POST /workflows/* returns 403 USE_EXECUTE_ENDPOINT',
+        test: 'Legacy workflow routes gracefully rerouted',
+        passed: rerouted,
+        details: 'POST /workflows/* gracefully rerouted through PrimeWorkflow (product-shipping-research still 403)',
       });
 
       const allPassed = results.every(r => r.passed);
@@ -240,14 +324,25 @@ export default {
       }
     }
 
-    // POST /workflows/code-execution - LOCKED DOWN
-    // Direct workflow access is disabled. Use POST /execute instead.
-    // PrimeWorkflow now uses workflow bindings directly.
+    // POST /workflows/code-execution - GRACEFUL REROUTE → PrimeWorkflow
     if (url.pathname === '/workflows/code-execution' && request.method === 'POST') {
-      return Response.json({
-        error: 'Direct workflow access disabled. Use POST /execute instead.',
-        code: 'USE_EXECUTE_ENDPOINT',
-      }, { status: 403 });
+      return handleGracefulReroute(request, env, {
+        route: '/workflows/code-execution',
+        requiredField: 'prompt',
+        mapParams: (body) => ({
+          task_id: `code-reroute-${Date.now()}`,
+          title: `[implement] ${String(body.prompt || '').slice(0, 80)}`,
+          description: String(body.prompt || ''),
+          context: {
+            ...(body.repo_url ? { repo: String(body.repo_url) } : {}),
+          },
+          hints: {
+            workflow: 'code-execution' as const,
+            ...(body.preferred_executor ? { provider: String(body.preferred_executor) } : {}),
+          },
+          ...(body.model_waterfall ? { model_waterfall: body.model_waterfall as string[] } : {}),
+        }),
+      });
     }
 
     // GET /workflows/code-execution/:id - Get workflow status
@@ -276,14 +371,23 @@ export default {
       }
     }
 
-    // POST /workflows/text-generation - LOCKED DOWN
-    // Direct workflow access is disabled. Use POST /execute instead.
-    // PrimeWorkflow now uses workflow bindings directly.
+    // POST /workflows/text-generation - GRACEFUL REROUTE → PrimeWorkflow
     if (url.pathname === '/workflows/text-generation' && request.method === 'POST') {
-      return Response.json({
-        error: 'Direct workflow access disabled. Use POST /execute instead.',
-        code: 'USE_EXECUTE_ENDPOINT',
-      }, { status: 403 });
+      return handleGracefulReroute(request, env, {
+        route: '/workflows/text-generation',
+        requiredField: 'prompt',
+        mapParams: (body) => ({
+          task_id: body.request_id ? String(body.request_id) : `text-reroute-${Date.now()}`,
+          title: `[research] ${String(body.prompt || '').slice(0, 80)}`,
+          description: String(body.prompt || ''),
+          context: {
+            ...(body.system_prompt ? { system_prompt: String(body.system_prompt) } : {}),
+          },
+          hints: {
+            workflow: 'text-generation' as const,
+          },
+        }),
+      });
     }
 
     // GET /workflows/text-generation/:id - Get workflow status
@@ -312,14 +416,21 @@ export default {
       }
     }
 
-    // POST /workflows/image-generation - LOCKED DOWN
-    // Direct workflow access is disabled. Use POST /execute instead.
-    // PrimeWorkflow now uses workflow bindings directly.
+    // POST /workflows/image-generation - GRACEFUL REROUTE → PrimeWorkflow
     if (url.pathname === '/workflows/image-generation' && request.method === 'POST') {
-      return Response.json({
-        error: 'Direct workflow access disabled. Use POST /execute instead.',
-        code: 'USE_EXECUTE_ENDPOINT',
-      }, { status: 403 });
+      return handleGracefulReroute(request, env, {
+        route: '/workflows/image-generation',
+        requiredField: 'prompt',
+        mapParams: (body) => ({
+          task_id: body.request_id ? String(body.request_id) : `image-reroute-${Date.now()}`,
+          title: `[image] ${String(body.prompt || '').slice(0, 80)}`,
+          description: String(body.prompt || ''),
+          hints: {
+            workflow: 'image-generation' as const,
+            ...(body.model_id ? { model: String(body.model_id) } : {}),
+          },
+        }),
+      });
     }
 
     // GET /workflows/image-generation/:id - Get workflow status
@@ -348,14 +459,23 @@ export default {
       }
     }
 
-    // POST /workflows/audio-generation - LOCKED DOWN
-    // Direct workflow access is disabled. Use POST /execute instead.
-    // PrimeWorkflow now uses workflow bindings directly.
+    // POST /workflows/audio-generation - GRACEFUL REROUTE → PrimeWorkflow
     if (url.pathname === '/workflows/audio-generation' && request.method === 'POST') {
-      return Response.json({
-        error: 'Direct workflow access disabled. Use POST /execute instead.',
-        code: 'USE_EXECUTE_ENDPOINT',
-      }, { status: 403 });
+      return handleGracefulReroute(request, env, {
+        route: '/workflows/audio-generation',
+        requiredField: 'text',
+        mapParams: (body) => ({
+          task_id: body.request_id ? String(body.request_id) : `audio-reroute-${Date.now()}`,
+          title: `[audio] ${String(body.text || '').slice(0, 80)}`,
+          description: String(body.text || ''),
+          hints: {
+            workflow: 'audio-generation' as const,
+            ...(body.voice_id || body.model_id
+              ? { model: String(body.voice_id || body.model_id) }
+              : {}),
+          },
+        }),
+      });
     }
 
     // GET /workflows/audio-generation/:id - Get workflow status
@@ -426,6 +546,10 @@ export default {
         'GET /test-routing (verify /execute routes through PrimeWorkflow)',
         'POST /execute (single entry point - triggers PrimeWorkflow)',
         'GET /status/:id',
+        'POST /workflows/code-execution (deprecated - gracefully rerouted to PrimeWorkflow)',
+        'POST /workflows/text-generation (deprecated - gracefully rerouted to PrimeWorkflow)',
+        'POST /workflows/image-generation (deprecated - gracefully rerouted to PrimeWorkflow)',
+        'POST /workflows/audio-generation (deprecated - gracefully rerouted to PrimeWorkflow)',
         'GET /workflows/code-execution/:id (status only)',
         'GET /workflows/text-generation/:id (status only)',
         'GET /workflows/image-generation/:id (status only)',

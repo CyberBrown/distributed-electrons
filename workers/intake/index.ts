@@ -11,6 +11,7 @@
  */
 
 import type { Env, IntakePayload, IntakeResponse, ErrorResponse, StoredRequest } from './types';
+import { handleIntakeReroute } from './intake-reroute';
 
 /**
  * Keywords that indicate a code execution request
@@ -116,7 +117,7 @@ function extractRepoUrl(query: string): string | undefined {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestId = crypto.randomUUID();
 
     try {
@@ -131,7 +132,7 @@ export default {
 
       // Route handling
       if (url.pathname === '/intake' && request.method === 'POST') {
-        const response = await handleIntake(request, env, requestId);
+        const response = await handleIntake(request, env, requestId, ctx);
         return addCorsHeaders(response);
       }
 
@@ -176,7 +177,8 @@ export default {
 async function handleIntake(
   request: Request,
   env: Env,
-  requestId: string
+  requestId: string,
+  ctx?: ExecutionContext
 ): Promise<Response> {
   try {
     // Parse request body
@@ -463,63 +465,28 @@ async function handleIntake(
       }
     }
 
-    // For non-workflow requests, continue with existing Router DO flow
-    // Notify Request Router DO
-    const routerId = env.REQUEST_ROUTER.idFromName('global-router');
-    const router = env.REQUEST_ROUTER.get(routerId);
+    // For non-workflow requests (text, image, audio, etc.):
+    // Reroute through PrimeWorkflow instead of broken RequestRouter DO.
+    // The RequestRouter DO binding is kept but no longer called.
+    console.log(`[INTAKE ${requestId}] Rerouting '${body.task_type || 'auto'}' request through PrimeWorkflow`);
 
-    const routerResponse = await router.fetch('http://router/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: requestId,
-        app_id: appId,
-        instance_id: instanceId,
-        query: body.query.trim(),
-        metadata: body.metadata,
-        task_type: body.task_type,
-        provider: body.provider,
-        model: body.model,
-        priority: body.priority || 0,
-        callback_url: body.callback_url,
-        created_at: now,
-      }),
+    // Attach ExecutionContext for waitUntil callback delivery
+    (request as any).ctx = ctx;
+
+    // Build a new Request with the original body (already consumed above)
+    const rerouteRequest = new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: JSON.stringify(body),
     });
+    (rerouteRequest as any).ctx = ctx;
 
-    const routerResult = await routerResponse.json() as any;
-
-    if (!routerResult.success) {
-      // Update D1 with error
-      await env.DB.prepare(`
-        UPDATE requests SET status = 'failed', error_message = ? WHERE id = ?
-      `).bind(routerResult.error || 'Router submission failed', requestId).run();
-
-      return createErrorResponse(
-        routerResult.error || 'Failed to submit to router',
-        'ROUTER_ERROR',
-        requestId,
-        500
-      );
-    }
-
-    // Update D1 with queue info
+    // Update D1 to reflect reroute (using 'queued' — CHECK constraint limits allowed values)
     await env.DB.prepare(`
-      UPDATE requests SET status = 'queued', queue_position = ?, queued_at = ? WHERE id = ?
-    `).bind(routerResult.queue_position, now, requestId).run();
+      UPDATE requests SET status = 'queued', queued_at = ? WHERE id = ?
+    `).bind(now, requestId).run();
 
-    // Return success response
-    const response: IntakeResponse = {
-      success: true,
-      request_id: requestId,
-      status: 'queued',
-      queue_position: routerResult.queue_position,
-      estimated_wait_ms: routerResult.estimated_wait_ms,
-    };
-
-    return Response.json(response, {
-      status: 202, // Accepted
-      headers: { 'X-Request-ID': requestId },
-    });
+    return handleIntakeReroute(rerouteRequest, env);
   } catch (error) {
     console.error('Intake error:', error);
 

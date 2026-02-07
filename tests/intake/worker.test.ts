@@ -38,6 +38,14 @@ const createMockEnv = () => ({
   },
   CONFIG_SERVICE_URL: 'https://api.distributedelectrons.com',
   DEFAULT_INSTANCE_ID: 'default',
+  DE_WORKFLOWS_URL: 'https://de-workflows.solamp.workers.dev',
+  PASSPHRASE: 'test-passphrase',
+});
+
+// Mock ExecutionContext
+const createMockCtx = () => ({
+  waitUntil: vi.fn(),
+  passThroughOnException: vi.fn(),
 });
 
 // Import worker after mocks
@@ -45,9 +53,11 @@ import worker from '../../workers/intake/index';
 
 describe('Intake Worker', () => {
   let mockEnv: ReturnType<typeof createMockEnv>;
+  let mockCtx: ReturnType<typeof createMockCtx>;
 
   beforeEach(() => {
     mockEnv = createMockEnv();
+    mockCtx = createMockCtx();
     vi.clearAllMocks();
   });
 
@@ -57,7 +67,7 @@ describe('Intake Worker', () => {
         method: 'GET',
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
@@ -73,7 +83,7 @@ describe('Intake Worker', () => {
         method: 'OPTIONS',
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
 
       expect(response.status).toBe(200);
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
@@ -85,7 +95,7 @@ describe('Intake Worker', () => {
         method: 'GET',
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
 
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
     });
@@ -102,7 +112,7 @@ describe('Intake Worker', () => {
         }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(202);
@@ -121,7 +131,7 @@ describe('Intake Worker', () => {
         }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
@@ -138,7 +148,7 @@ describe('Intake Worker', () => {
         }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
@@ -152,7 +162,7 @@ describe('Intake Worker', () => {
         body: 'not valid json',
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
@@ -171,7 +181,7 @@ describe('Intake Worker', () => {
         }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
 
       expect(response.status).toBe(202);
       // Verify D1 was called with the header app_id
@@ -191,7 +201,7 @@ describe('Intake Worker', () => {
         }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
 
       expect(response.status).toBe(202);
     });
@@ -212,7 +222,7 @@ describe('Intake Worker', () => {
         }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(202);
@@ -229,7 +239,7 @@ describe('Intake Worker', () => {
         }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
 
       expect(response.headers.get('X-Request-ID')).toBeDefined();
     });
@@ -253,7 +263,7 @@ describe('Intake Worker', () => {
         }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(500);
@@ -286,7 +296,7 @@ describe('Intake Worker', () => {
         method: 'GET',
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
@@ -300,7 +310,7 @@ describe('Intake Worker', () => {
         method: 'GET',
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
@@ -318,7 +328,7 @@ describe('Intake Worker', () => {
         method: 'GET',
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(404);
@@ -344,7 +354,7 @@ describe('Intake Worker', () => {
         body: JSON.stringify({ request_id: 'test-request-id' }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(200);
@@ -359,7 +369,7 @@ describe('Intake Worker', () => {
         body: JSON.stringify({}),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
@@ -379,7 +389,7 @@ describe('Intake Worker', () => {
         body: JSON.stringify({ request_id: 'nonexistent' }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(404);
@@ -402,7 +412,7 @@ describe('Intake Worker', () => {
         body: JSON.stringify({ request_id: 'test-request-id' }),
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(400);
@@ -416,7 +426,7 @@ describe('Intake Worker', () => {
         method: 'GET',
       });
 
-      const response = await worker.fetch(request, mockEnv as any);
+      const response = await worker.fetch(request, mockEnv as any, mockCtx as any);
       const data = await response.json() as Record<string, any> as any;
 
       expect(response.status).toBe(404);

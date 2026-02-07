@@ -51,6 +51,8 @@ script_name = "de-workflows"
 [vars]
 CONFIG_SERVICE_URL = "https://api.distributedelectrons.com"
 DEFAULT_INSTANCE_ID = "default"
+DE_WORKFLOWS_URL = "https://de-workflows.solamp.workers.dev"
+# PASSPHRASE is set via `wrangler secret put PASSPHRASE`
 
 # Custom Domain
 [[routes]]

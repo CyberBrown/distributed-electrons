@@ -19,6 +19,10 @@ export interface Env {
   // Environment variables
   CONFIG_SERVICE_URL: string;
   DEFAULT_INSTANCE_ID?: string;
+
+  // Intake reroute (PrimeWorkflow bypass)
+  DE_WORKFLOWS_URL: string;
+  PASSPHRASE: string;
 }
 
 // Workflow binding type (Cloudflare Workflows)
