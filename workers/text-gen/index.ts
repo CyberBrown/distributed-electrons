@@ -1,7 +1,11 @@
+// @ts-nocheck — This entire worker is deprecated (Prometheus Phase 1).
+// All endpoints except /health return 410 Gone. Code preserved for Phase 2 reference.
 /**
  * Text Generation Worker
- * Main worker that orchestrates text generation workflow
- * Now with Universal LLM Router for automatic fallback
+ * @deprecated Prometheus Phase 1 — This worker is retired.
+ * Text generation is now handled by TextGenerationWorkflow in de-workflows.
+ * All endpoints except /health return 410 Gone with migration instructions.
+ * This worker will be deleted in Phase 2.
  */
 
 import type {
@@ -109,7 +113,7 @@ function createRouterWithGenerators(env: Env): LLMRouter {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, _env: Env): Promise<Response> {
     // Generate request ID for tracking
     const requestId = crypto.randomUUID();
 
@@ -121,62 +125,44 @@ export default {
         return handleCorsPrelight();
       }
 
-      // Route handling
-      if (url.pathname === '/generate' && request.method === 'POST') {
-        const response = await handleGenerate(request, env, requestId);
-        return addCorsHeaders(response);
-      }
-
-      if (url.pathname === '/generate/stream' && request.method === 'POST') {
-        const response = await handleGenerateStream(request, env, requestId);
-        return addCorsHeaders(response);
-      }
-
+      // Health check — keep alive for monitoring
       if (url.pathname === '/health' && request.method === 'GET') {
-        // Create router to get provider health
-        const router = createRouterWithGenerators(env);
         return addCorsHeaders(Response.json({
-          status: 'healthy',
+          status: 'deprecated',
           service: 'text-gen',
+          message: 'This worker is deprecated. Use POST /execute on de-workflows instead.',
+          migrate_to: 'https://de-workflows.solamp.workers.dev/execute',
           timestamp: new Date().toISOString(),
-          providers: router.getHealthSummary(),
         }));
       }
 
-      // ===========================================
-      // Phase 2 Router Endpoints (multi-media, workflows)
-      // ===========================================
-
-      // Route a request through the v2 router
-      if (url.pathname === '/v2/route' && request.method === 'POST') {
-        const response = await handleRouterV2Request(request, env, requestId);
-        return addCorsHeaders(response);
-      }
-
-      // Get v2 router health status
-      if (url.pathname === '/v2/health' && request.method === 'GET') {
-        const response = await handleRouterV2Health(env, requestId);
-        return addCorsHeaders(response);
-      }
-
-      // List available workflows
-      if (url.pathname === '/v2/workflows' && request.method === 'GET') {
-        const response = await handleListWorkflows(env, requestId);
-        return addCorsHeaders(response);
-      }
-
-      // Get router stats
-      if (url.pathname === '/v2/stats' && request.method === 'GET') {
-        const response = await handleRouterStats(env, requestId);
-        return addCorsHeaders(response);
-      }
-
-      return addCorsHeaders(createErrorResponse(
-        'Not Found',
-        'ROUTE_NOT_FOUND',
-        requestId,
-        404
-      ));
+      // All other endpoints — return 410 Gone with migration guide
+      return addCorsHeaders(Response.json({
+        error: 'This endpoint has been retired (Prometheus Phase 1).',
+        error_code: 'DEPRECATED',
+        migrate_to: {
+          endpoint: 'POST /execute',
+          url: 'https://de-workflows.solamp.workers.dev/execute',
+          example: {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Passphrase': '<your-passphrase>',
+            },
+            body: {
+              params: {
+                task_id: 'your-unique-id',
+                title: '[research] Your text generation task',
+                description: 'Your prompt text here',
+                context: {},
+                hints: { workflow: 'text-generation' },
+                timeout_ms: 60000,
+              },
+            },
+          },
+        },
+        request_id: requestId,
+      }, { status: 410 }));
     } catch (error) {
       console.error('Unhandled error:', error);
       return addCorsHeaders(createErrorResponse(
