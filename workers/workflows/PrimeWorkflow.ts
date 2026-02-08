@@ -27,6 +27,7 @@ import type {
   PrimeWorkflowParams,
   PrimeWorkflowResult,
   TaskType,
+  ClassificationResult,
   PrimeEnv,
 } from './types';
 import { determineWaterfall, parseDefaultWaterfall } from './lib/model-mapping';
@@ -211,18 +212,22 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
     }
 
     // Step 2: Classify task type (apps suggest, we decide)
-    const taskType = await step.do(
+    const classification = await step.do(
       'classify-task',
       {
         retries: { limit: 1, delay: '1 second', backoff: 'constant' },
         timeout: '5 seconds',
       },
       async () => {
-        return this.classifyTask(title, description, context, hints);
+        return this.classifyTask(title, description, context, hints, !!callback_url);
       }
     );
 
-    console.log(`[PrimeWorkflow] Classified as: ${taskType}`);
+    const taskType = classification.taskType;
+    console.log(
+      `[PrimeWorkflow] Classified as: ${taskType} ` +
+      `(routing=${classification.routingMode}, local=${classification.localPreferred})`
+    );
 
     // Step 3: Route to appropriate sub-workflow and wait for completion
     let subResult: SubWorkflowResult;
@@ -310,10 +315,30 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
   }
 
   /**
-   * Classify task type based on context and content
-   * Apps suggest via hints, but we make the final decision
+   * Classify task type based on context and content.
+   * Apps suggest via hints, but we make the final decision.
+   * Returns classification with routing metadata for waterfall decisions.
    */
   private classifyTask(
+    title: string,
+    description: string,
+    context?: PrimeWorkflowParams['context'],
+    hints?: PrimeWorkflowParams['hints'],
+    hasCallback = false
+  ): ClassificationResult {
+    const taskType = this.inferTaskType(title, description, context, hints);
+    return {
+      taskType,
+      routingMode: this.inferRoutingMode(taskType, hasCallback),
+      localPreferred: this.hasLocalEquivalent(taskType),
+      cloudProviders: this.rankCloudProviders(taskType),
+    };
+  }
+
+  /**
+   * Infer task type from signals (context, title tags, keywords, hints)
+   */
+  private inferTaskType(
     title: string,
     description: string,
     context?: PrimeWorkflowParams['context'],
@@ -432,6 +457,58 @@ export class PrimeWorkflow extends WorkflowEntrypoint<PrimeEnv, PrimeWorkflowPar
     // 6. Default to text (safer, cheaper, faster)
     console.log('[PrimeWorkflow] Classification: text (default)');
     return 'text';
+  }
+
+  /**
+   * Determine routing mode: realtime (need answer now) vs batch (can wait).
+   * Callback URL presence implies async/batch is acceptable.
+   */
+  private inferRoutingMode(taskType: TaskType, hasCallback: boolean): 'realtime' | 'batch' {
+    // Code execution is always batch-friendly (takes minutes anyway)
+    if (taskType === 'code') return 'batch';
+    // Video rendering is always batch
+    if (taskType === 'video') return 'batch';
+    // If caller provided a callback, they can wait
+    if (hasCallback) return 'batch';
+    // Otherwise, caller is polling — needs fast answer
+    return 'realtime';
+  }
+
+  /**
+   * Does this task type have a local Spark equivalent?
+   */
+  private hasLocalEquivalent(taskType: TaskType): boolean {
+    switch (taskType) {
+      case 'text': return true;           // Nemotron/vLLM
+      case 'code': return true;           // claude-runner, gemini-runner
+      case 'image': return true;          // ComfyUI (future)
+      case 'audio': return false;         // No local TTS yet
+      case 'video': return false;         // No local video rendering
+      case 'product-shipping-research': return false; // z.ai only
+      default: return false;
+    }
+  }
+
+  /**
+   * Rank cloud providers for this task type (used for waterfall ordering)
+   */
+  private rankCloudProviders(taskType: TaskType): string[] {
+    switch (taskType) {
+      case 'text':
+        return ['zai', 'anthropic', 'gemini', 'openai', 'workers-ai'];
+      case 'code':
+        return ['anthropic', 'gemini', 'openai'];
+      case 'image':
+        return ['ideogram', 'dall-e', 'stability'];
+      case 'audio':
+        return ['elevenlabs', 'openai-tts'];
+      case 'video':
+        return ['shotstack'];
+      case 'product-shipping-research':
+        return ['zai'];
+      default:
+        return ['zai', 'anthropic', 'gemini', 'openai'];
+    }
   }
 
   /**
