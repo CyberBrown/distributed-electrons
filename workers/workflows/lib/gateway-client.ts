@@ -1,15 +1,15 @@
 /**
  * Shared AI Gateway routing helper.
  *
- * Consolidates the pattern used across callAnthropic, callGeminiApi, and callOpenAI
- * in TextGenerationWorkflow. Routes requests through Cloudflare AI Gateway when
- * CF_AIG_TOKEN is configured, otherwise falls back to direct provider APIs.
+ * Consolidates the pattern used across callAnthropic, callGeminiApi, callOpenAI,
+ * and callZai in TextGenerationWorkflow. Routes requests through Cloudflare AI
+ * Gateway when CF_AIG_TOKEN is configured, otherwise falls back to direct APIs.
  *
- * NOTE: z.ai (GLM/DeepSeek) is NOT a supported AI Gateway provider.
- * Those calls remain direct — do not add a 'z-ai' provider here.
+ * z.ai is a custom provider in AI Gateway — its slug is prefixed with 'custom-'
+ * per Cloudflare's custom provider requirements.
  */
 
-export type GatewayProvider = 'anthropic' | 'openai' | 'google-ai-studio';
+export type GatewayProvider = 'anthropic' | 'openai' | 'google-ai-studio' | 'zai' | 'workers-ai';
 
 export interface GatewayConfig {
   /** AI Gateway base URL (AI_GATEWAY_URL env var) */
@@ -36,6 +36,21 @@ const DIRECT_BASE_URLS: Record<GatewayProvider, string> = {
   anthropic: 'https://api.anthropic.com',
   openai: 'https://api.openai.com',
   'google-ai-studio': 'https://generativelanguage.googleapis.com',
+  zai: 'https://api.z.ai',
+  'workers-ai': 'https://api.cloudflare.com/client/v4/accounts',
+};
+
+/**
+ * Maps provider to the slug used in gateway URLs.
+ * Custom providers require the 'custom-' prefix.
+ * Native providers use their name directly.
+ */
+const GATEWAY_SLUGS: Record<GatewayProvider, string> = {
+  anthropic: 'anthropic',
+  openai: 'openai',
+  'google-ai-studio': 'google-ai-studio',
+  zai: 'custom-zai',
+  'workers-ai': 'workers-ai',
 };
 
 /** Maps provider to its native auth header name */
@@ -43,6 +58,8 @@ const AUTH_HEADERS: Record<GatewayProvider, string> = {
   anthropic: 'x-api-key',
   openai: 'Authorization',
   'google-ai-studio': '', // Google uses query-param auth, handled by caller
+  zai: 'Authorization',
+  'workers-ai': 'Authorization',
 };
 
 /**
@@ -64,7 +81,8 @@ export async function callViaGateway(
   };
 
   if (useGateway) {
-    url = `${config.gatewayBaseUrl}/${options.provider}${options.path}`;
+    const slug = GATEWAY_SLUGS[options.provider];
+    url = `${config.gatewayBaseUrl}/${slug}${options.path}`;
     headers['cf-aig-authorization'] = `Bearer ${config.cfAigToken}`;
   } else {
     url = `${DIRECT_BASE_URLS[options.provider]}${options.path}`;

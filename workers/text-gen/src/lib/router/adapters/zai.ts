@@ -1,30 +1,33 @@
 /**
- * z.ai Provider Adapter
- * Routes through AI Gateway
+ * z.ai Provider Adapter (PRIMARY LLM — GLM-4.7)
+ * Routes through AI Gateway as custom provider (slug: custom-zai)
  * Uses OpenAI-compatible API format
  */
 
 import type { AdapterContext, MediaOptions, TextResult, TextOptions } from '../types';
 import { TextAdapter } from './base';
 
-// Note: AI Gateway custom provider BYOK not working for z.ai
-// Direct API used until Gateway issue is resolved
-
 export class ZaiAdapter extends TextAdapter {
   readonly providerId = 'zai';
 
-  private getBaseUrl(_context: AdapterContext): string {
-    // Note: AI Gateway custom provider BYOK not working for z.ai
-    // Using direct API until Gateway issue is resolved
+  private getBaseUrl(context: AdapterContext): string {
+    if (context.gatewayToken) {
+      // Route through AI Gateway (BYOK handles auth)
+      return `${context.gatewayUrl}/custom-zai/api/paas`;
+    }
     return 'https://api.z.ai/api/paas';
   }
 
   private getHeaders(context: AdapterContext): Record<string, string> {
-    // Direct API call (Gateway BYOK not working for z.ai)
-    return {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${context.apiKey}`,
     };
+    if (context.gatewayToken) {
+      headers['cf-aig-authorization'] = `Bearer ${context.gatewayToken}`;
+    } else {
+      headers['Authorization'] = `Bearer ${context.apiKey}`;
+    }
+    return headers;
   }
 
   async execute(
@@ -61,7 +64,6 @@ export class ZaiAdapter extends TextAdapter {
       requestBody.stop = textOptions.stop_sequences;
     }
 
-    // AI Gateway custom provider base URL should be: https://api.z.ai/api/paas
     // z.ai uses /v4 API version (not /v1)
     const response = await this.makeRequest(
       `${this.getBaseUrl(context)}/v4/chat/completions`,

@@ -11,6 +11,7 @@ INSERT INTO workers (id, name, media_types) VALUES
 
 -- Providers
 INSERT INTO providers (id, name, type, base_endpoint, auth_type, auth_secret_name, priority) VALUES
+  ('zai', 'Z.ai', 'api', 'https://api.z.ai/api/paas', 'bearer', 'ZAI_API_KEY', 5),
   ('spark-local', 'Spark Nemotron', 'local', NULL, 'none', 'SPARK_LOCAL_URL', 10),
   ('anthropic', 'Anthropic', 'api', 'https://api.anthropic.com', 'api_key', 'ANTHROPIC_API_KEY', 50),
   ('openai', 'OpenAI', 'api', 'https://api.openai.com', 'bearer', 'OPENAI_API_KEY', 60),
@@ -21,6 +22,7 @@ INSERT INTO providers (id, name, type, base_endpoint, auth_type, auth_secret_nam
 
 -- Models for text-gen
 INSERT INTO models (id, provider_id, model_id, worker_id, capabilities, context_window, cost_input_per_1k, cost_output_per_1k, quality_tier, speed_tier, priority) VALUES
+  ('zai:glm-4.7', 'zai', 'glm-4.7', 'text-gen', '["reasoning","code"]', 128000, 0, 0, 'premium', 'fast', 5),
   ('spark:nemotron-3-nano', 'spark-local', 'nemotron-3-nano', 'text-gen', '["reasoning","code"]', 1048576, 0, 0, 'standard', 'fast', 10),
   ('anthropic:claude-sonnet-4', 'anthropic', 'claude-sonnet-4-20250514', 'text-gen', '["reasoning","code","vision"]', 200000, 0.003, 0.015, 'premium', 'medium', 50),
   ('anthropic:claude-haiku', 'anthropic', 'claude-3-5-haiku-20241022', 'text-gen', '["code"]', 200000, 0.001, 0.005, 'draft', 'fast', 30),
@@ -57,6 +59,7 @@ INSERT INTO models (id, provider_id, model_id, worker_id, capabilities, quality_
 
 -- Worker-Provider mappings
 INSERT INTO worker_providers (worker_id, provider_id, priority) VALUES
+  ('text-gen', 'zai', 5),
   ('text-gen', 'spark-local', 10),
   ('text-gen', 'anthropic', 50),
   ('text-gen', 'openai', 60),
@@ -71,6 +74,7 @@ INSERT INTO worker_providers (worker_id, provider_id, priority) VALUES
 
 -- Initialize provider status
 INSERT INTO provider_status (provider_id, healthy) VALUES
+  ('zai', 1),
   ('spark-local', 1),
   ('anthropic', 1),
   ('openai', 1),

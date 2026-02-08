@@ -37,11 +37,24 @@ export interface ProviderHealthState {
  * Priority 1 = first choice, 2 = second choice, etc.
  */
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
-  // Anthropic first - reliable structured JSON output
+  // z.ai first - primary LLM (GLM-4.7)
+  {
+    id: 'zai',
+    name: 'Z.ai',
+    priority: 1,
+    baseUrl: 'https://api.z.ai/api/paas',
+    healthStatus: 'healthy',
+    lastHealthCheck: new Date(),
+    errorCount: 0,
+    consecutiveFailures: 0,
+    supportsStreaming: false,
+    models: ['glm-*'],
+  },
+  // Anthropic second - reliable structured JSON output
   {
     id: 'anthropic',
     name: 'Anthropic',
-    priority: 1,
+    priority: 2,
     baseUrl: 'https://api.anthropic.com',
     healthStatus: 'healthy',
     lastHealthCheck: new Date(),
@@ -50,11 +63,11 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     supportsStreaming: true,
     models: ['claude-*'],
   },
-  // OpenAI second - good JSON support
+  // OpenAI third - good JSON support
   {
     id: 'openai',
     name: 'OpenAI',
-    priority: 2,
+    priority: 3,
     baseUrl: 'https://api.openai.com',
     healthStatus: 'healthy',
     lastHealthCheck: new Date(),
@@ -67,7 +80,7 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
   {
     id: 'spark-local',
     name: 'Spark Local (On-Prem)',
-    priority: 3,
+    priority: 4,
     baseUrl: '', // Set from SPARK_LOCAL_URL env
     healthStatus: 'healthy',
     lastHealthCheck: new Date(),

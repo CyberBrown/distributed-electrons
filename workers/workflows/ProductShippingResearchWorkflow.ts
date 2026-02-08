@@ -20,7 +20,7 @@ import type {
 
 // z.ai direct API
 const ZAI_API_URL = 'https://api.z.ai/api/paas/v4/chat/completions';
-const ZAI_MODEL = 'glm-4-plus';
+const ZAI_MODEL = 'glm-4.7';
 
 /**
  * Build the system prompt for shipping research

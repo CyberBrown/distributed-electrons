@@ -279,7 +279,8 @@ export type TextProvider =
   | 'zai'
   | 'anthropic'
   | 'gemini'
-  | 'openai';
+  | 'openai'
+  | 'workers-ai';
 
 /**
  * Provider availability status
@@ -332,7 +333,7 @@ export interface TextGenerationEnv {
   /** Cloudflare AI Gateway token - when set, routes API calls through Gateway */
   CF_AIG_TOKEN?: string;
 
-  /** z.ai API key (direct API - not routed through Gateway) */
+  /** z.ai API key */
   ZAI_API_KEY?: string;
 
   /** Anthropic API key (fallback if no Gateway token) */

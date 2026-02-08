@@ -4,13 +4,14 @@
  * Cloudflare Workflow for text generation with opportunistic runner usage.
  * Uses a waterfall approach to find the best available provider:
  *
- * 1. Claude-runner on Spark (if idle - not queued with code tasks)
- * 2. Gemini-runner on Spark (if idle)
- * 3. Nemotron on Spark (local vLLM - always available if server is up)
- * 4. z.ai API
+ * 1. z.ai API (GLM-4.7 — primary LLM)
+ * 2. Claude-runner on Spark (if idle - not queued with code tasks)
+ * 3. Gemini-runner on Spark (if idle)
+ * 4. Nemotron on Spark (local vLLM - always available if server is up)
  * 5. Anthropic API
  * 6. Gemini API
  * 7. OpenAI API
+ * 8. Workers AI (Cloudflare's serverless inference)
  *
  * The key insight: we opportunistically use runners for simple text tasks
  * when they're not busy with code execution, avoiding API costs.
@@ -130,15 +131,16 @@ const DEFAULT_GEMINI_RUNNER_URL = 'https://gemini-runner.shiftaltcreate.com';
 // Queue depth threshold - skip runners if more than this many tasks queued
 const DEFAULT_QUEUE_THRESHOLD = 3;
 
-// Provider waterfall order
+// Provider waterfall order — z.ai (GLM-4.7) is the primary LLM
 const PROVIDER_WATERFALL: TextProvider[] = [
+  'zai',
   'claude-runner',
   'gemini-runner',
   'nemotron',
-  'zai',
   'anthropic',
   'gemini',
   'openai',
+  'workers-ai',
 ];
 
 export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv, TextGenerationParams> {
@@ -353,11 +355,12 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     // Check if AI Gateway is configured (handles API keys via BYOK)
     const hasGateway = !!this.env.CF_AIG_TOKEN;
 
-    // 4. z.ai - available if API key configured (not routed through Gateway)
+    // 1. z.ai — PRIMARY LLM, available if Gateway token OR API key configured
+    const zaiAvailable = hasGateway || !!this.env.ZAI_API_KEY;
     results.push({
       provider: 'zai',
-      available: !!this.env.ZAI_API_KEY,
-      reason: this.env.ZAI_API_KEY ? 'API key configured' : 'no API key',
+      available: zaiAvailable,
+      reason: hasGateway ? 'via AI Gateway (primary)' : (this.env.ZAI_API_KEY ? 'API key configured (primary)' : 'no API key'),
     });
 
     // 5. Anthropic - available if Gateway token OR API key configured
@@ -382,6 +385,13 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
       provider: 'openai',
       available: openaiAvailable,
       reason: hasGateway ? 'via AI Gateway' : (this.env.OPENAI_API_KEY ? 'API key configured' : 'no API key'),
+    });
+
+    // 8. Workers AI - available via AI Gateway (BYOK handles auth)
+    results.push({
+      provider: 'workers-ai',
+      available: hasGateway,
+      reason: hasGateway ? 'via AI Gateway' : 'requires AI Gateway',
     });
 
     return results;
@@ -464,6 +474,8 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
         return this.callGeminiApi(params);
       case 'openai':
         return this.callOpenAI(params);
+      case 'workers-ai':
+        return this.callWorkersAI(params);
       default:
         throw new Error(`Unknown provider: ${provider}`);
     }
@@ -615,7 +627,7 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
   }
 
   /**
-   * Call z.ai API
+   * Call z.ai API (routed through AI Gateway as custom provider when configured)
    */
   private async callZai(params: {
     prompt: string;
@@ -629,18 +641,16 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     }
     messages.push({ role: 'user', content: params.prompt });
 
-    const response = await fetch('https://api.z.ai/api/paas/v4/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.env.ZAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-reasoner',
+    const response = await callViaGateway(this.getGatewayConfig(), {
+      provider: 'zai',
+      path: '/api/paas/v4/chat/completions',
+      apiKey: this.env.ZAI_API_KEY,
+      body: {
+        model: 'glm-4.7',
         messages,
         max_tokens: params.max_tokens,
         temperature: params.temperature,
-      }),
+      },
     });
 
     if (!response.ok) {
@@ -781,6 +791,48 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     if (!response.ok) {
       const error = await response.text();
       throw new Error(`OpenAI error: ${error}`);
+    }
+
+    const data = await response.json() as {
+      choices: Array<{ message: { content: string } }>;
+      usage?: { total_tokens: number };
+    };
+
+    return {
+      text: data.choices[0]?.message?.content || '',
+      tokens_used: data.usage?.total_tokens,
+    };
+  }
+
+  /**
+   * Call Workers AI via AI Gateway (or direct Cloudflare REST API)
+   */
+  private async callWorkersAI(params: {
+    prompt: string;
+    system_prompt?: string;
+    max_tokens: number;
+    temperature: number;
+  }): Promise<{ text: string; tokens_used?: number }> {
+    const messages: Array<{ role: string; content: string }> = [];
+    if (params.system_prompt) {
+      messages.push({ role: 'system', content: params.system_prompt });
+    }
+    messages.push({ role: 'user', content: params.prompt });
+
+    const response = await callViaGateway(this.getGatewayConfig(), {
+      provider: 'workers-ai',
+      path: '/v1/chat/completions',
+      body: {
+        model: '@cf/meta/llama-3.1-8b-instruct',
+        messages,
+        max_tokens: params.max_tokens,
+        temperature: params.temperature,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Workers AI error: ${error}`);
     }
 
     const data = await response.json() as {

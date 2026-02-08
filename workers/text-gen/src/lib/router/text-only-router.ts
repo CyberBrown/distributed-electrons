@@ -3,8 +3,8 @@
  * Fast routing for simple text tasks without code execution overhead
  *
  * Priority order:
- * 1. Spark (Nemotron) - Local, free, fast
- * 2. z.ai - Cheap cloud alternative
+ * 1. z.ai (GLM-4.7) - Primary LLM
+ * 2. Spark (Nemotron) - Local, free, fast
  * 3. Gemini Flash - Fast, cheap fallback
  * 4. OpenAI GPT-4o-mini - Reliable fallback
  */
@@ -37,19 +37,19 @@ interface TextOnlyProvider {
  */
 const TEXT_ONLY_PROVIDERS: TextOnlyProvider[] = [
   {
+    id: 'zai',
+    adapter: 'zai',
+    model: 'glm-4.7',
+    priority: 1,
+    requiresApiKey: true,
+    apiKeyEnvVar: 'ZAI_API_KEY',
+  },
+  {
     id: 'spark-local',
     adapter: 'spark',
     model: 'nvidia/Llama-3.1-Nemotron-70B-Instruct-HF',
-    priority: 1,
-    requiresApiKey: false,
-  },
-  {
-    id: 'zai',
-    adapter: 'zai',
-    model: 'deepseek-reasoner',
     priority: 2,
-    requiresApiKey: true,
-    apiKeyEnvVar: 'ZAI_API_KEY',
+    requiresApiKey: false,
   },
   // Additional fallbacks can be added here
 ];
