@@ -6,7 +6,7 @@
  * - Accept requests from client apps
  * - Validate and enrich request data
  * - Store request in D1 database
- * - Notify Request Router DO
+ * - Route to PrimeWorkflow via intake-reroute.ts
  * - Return request ID for tracking
  */
 
@@ -466,8 +466,7 @@ async function handleIntake(
     }
 
     // For non-workflow requests (text, image, audio, etc.):
-    // Reroute through PrimeWorkflow instead of broken RequestRouter DO.
-    // The RequestRouter DO binding is kept but no longer called.
+    // Reroute through PrimeWorkflow (Prometheus Phase 1).
     console.log(`[INTAKE ${requestId}] Rerouting '${body.task_type || 'auto'}' request through PrimeWorkflow`);
 
     // Attach ExecutionContext for waitUntil callback delivery
@@ -524,21 +523,8 @@ async function handleStatus(
       return createErrorResponse('Request not found', 'NOT_FOUND', requestId, 404);
     }
 
-    // Also check Router DO for live queue position
-    let liveQueuePosition = result.queue_position;
-    if (result.status === 'queued') {
-      try {
-        const routerId = env.REQUEST_ROUTER.idFromName('global-router');
-        const router = env.REQUEST_ROUTER.get(routerId);
-        const routerResponse = await router.fetch(`http://router/status?request_id=${id}`);
-        const routerResult = await routerResponse.json() as any;
-        if (routerResult.success && routerResult.queue_position !== undefined) {
-          liveQueuePosition = routerResult.queue_position;
-        }
-      } catch {
-        // Use D1 value if router unavailable
-      }
-    }
+    // Queue position from D1 (RequestRouter DO removed — Prometheus Phase 1)
+    const liveQueuePosition = result.queue_position;
 
     return Response.json({
       success: true,
@@ -601,15 +587,7 @@ async function handleCancel(
       );
     }
 
-    // Cancel in Router DO
-    const routerId = env.REQUEST_ROUTER.idFromName('global-router');
-    const router = env.REQUEST_ROUTER.get(routerId);
-
-    await router.fetch('http://router/cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request_id: body.request_id }),
-    });
+    // RequestRouter DO removed — Prometheus Phase 1. Cancel via D1 only.
 
     // Update D1
     await env.DB.prepare(`

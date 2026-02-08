@@ -19,11 +19,11 @@ database_id = "placeholder-replace-with-actual-id"
 binding = "DELIVERABLES_STORAGE"
 bucket_name = "de-deliverables-storage"
 
-# Request Router Durable Object
-[[durable_objects.bindings]]
-name = "REQUEST_ROUTER"
-class_name = "RequestRouter"
-script_name = "request-router"
+# REMOVED — Prometheus Phase 1. RequestRouter bypassed by intake-reroute.ts.
+# [[durable_objects.bindings]]
+# name = "REQUEST_ROUTER"
+# class_name = "RequestRouter"
+# script_name = "request-router"
 
 # Environment Variables
 [vars]

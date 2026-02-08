@@ -492,30 +492,16 @@ async function handleReject(
 
 /**
  * Notify Request Router DO of completion
+ * @deprecated Prometheus Phase 1 — RequestRouter DO is no longer called.
+ * This function is now a no-op. Callers retained for easy Phase 2 cleanup.
  */
 async function notifyRouterCompletion(
-  env: Env,
-  requestId: string,
-  success: boolean,
-  error?: string
+  _env: Env,
+  _requestId: string,
+  _success: boolean,
+  _error?: string
 ): Promise<void> {
-  try {
-    const routerId = env.REQUEST_ROUTER.idFromName('global-router');
-    const router = env.REQUEST_ROUTER.get(routerId);
-
-    await router.fetch('http://router/complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        request_id: requestId,
-        success,
-        error,
-      }),
-    });
-  } catch (e) {
-    console.error('Failed to notify router:', e);
-    // Don't throw - this is non-critical
-  }
+  // No-op — RequestRouter DO removed in Prometheus Phase 1
 }
 
 /**

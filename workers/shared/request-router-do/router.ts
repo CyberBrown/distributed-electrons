@@ -1,8 +1,11 @@
 /**
- * Request Router Durable Object
- * Central orchestration for async request processing
+ * @deprecated Prometheus Phase 1 — This Durable Object is no longer called.
+ * Intake requests are rerouted through PrimeWorkflow via intake-reroute.ts.
+ * This code will be deleted in Phase 2.
  *
- * Responsibilities:
+ * See: docs/AUDIT-REPORT-2026-02-07.md
+ *
+ * Original responsibilities:
  * - Accept requests from Intake Worker
  * - Classify task types
  * - Select optimal provider/model

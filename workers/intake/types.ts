@@ -5,7 +5,7 @@
 // Environment bindings
 export interface Env {
   // Durable Objects
-  REQUEST_ROUTER: DurableObjectNamespace;
+  // REQUEST_ROUTER removed — Prometheus Phase 1. See intake-reroute.ts.
   RATE_LIMITER: DurableObjectNamespace;
 
   // Cloudflare Workflows
