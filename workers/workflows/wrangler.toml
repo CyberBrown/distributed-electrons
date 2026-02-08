@@ -88,6 +88,8 @@ AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/52b1c60ff2a24fb21c1ef9a42
 IMAGE_GEN_URL = "https://image-gen.solamp.workers.dev"
 # Audio generation worker URL
 AUDIO_GEN_URL = "https://audio-gen.solamp.workers.dev"
+# Spark Gateway for waterfall routing (local GPU availability checks)
+SPARK_GATEWAY_URL = "https://spark-gateway.shiftaltcreate.com"
 # Default model waterfall for code execution (comma-separated model names)
 # Order: Claude Sonnet (balanced) → Gemini Flash (fast) → Claude Opus (powerful) → GLM-4 (local)
 DEFAULT_MODEL_WATERFALL = "claude-sonnet-4.5,gemini-2.0-flash-exp,claude-opus-4.5,glm-4-7b"

@@ -353,6 +353,9 @@ export interface TextGenerationEnv {
 
   /** Queue depth threshold - skip runners if queue exceeds this */
   QUEUE_DEPTH_THRESHOLD?: string;
+
+  /** Spark Gateway URL for waterfall routing availability checks */
+  SPARK_GATEWAY_URL?: string;
 }
 
 // ============================================================================
@@ -539,6 +542,20 @@ export interface AudioGenEnv extends NexusEnv {
  * Task type classification for routing
  */
 export type TaskType = 'code' | 'text' | 'video' | 'image' | 'audio' | 'product-shipping-research';
+
+/**
+ * Classification result with routing metadata for waterfall decisions
+ */
+export interface ClassificationResult {
+  /** The determined task type */
+  taskType: TaskType;
+  /** Whether the request needs a real-time answer or can be batched */
+  routingMode: 'realtime' | 'batch';
+  /** Whether this task type has a local Spark equivalent */
+  localPreferred: boolean;
+  /** Ranked cloud providers for this task type */
+  cloudProviders: string[];
+}
 
 /**
  * Workflow binding type (for Cloudflare Workflows)

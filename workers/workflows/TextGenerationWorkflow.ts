@@ -26,6 +26,7 @@ import type {
   ProviderStatus,
 } from './types';
 import { callViaGateway, type GatewayConfig } from './lib/gateway-client';
+import { checkSparkAvailability, type SparkAvailability } from './lib/spark-client';
 
 /**
  * Failure indicators that suggest the AI reported success but didn't actually complete the task.
@@ -163,6 +164,35 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
     const attemptedProviders: TextProvider[] = [];
     let result: TextGenerationResult | null = null;
 
+    // Step 0: Check Spark availability (waterfall pre-check)
+    // This determines if local GPU resources are available before provider selection.
+    // 3s timeout — if Spark Gateway is unreachable, falls through to cloud.
+    const sparkCheck = await step.do(
+      'check-spark-availability',
+      {
+        retries: { limit: 0, delay: '1 second' }, // Don't retry — if Spark is down, just skip
+        timeout: '5 seconds',
+      },
+      async () => {
+        if (!this.env.SPARK_GATEWAY_URL) {
+          return {
+            available: false,
+            service: 'llm',
+            reason: 'No SPARK_GATEWAY_URL configured',
+            gpu_memory_free_mb: 0,
+            gpu_utilization_pct: 0,
+            recommendation: 'use_cloud' as const,
+          };
+        }
+        return checkSparkAvailability(this.env.SPARK_GATEWAY_URL, 'llm', 'waterfall');
+      }
+    );
+
+    console.log(
+      `[TextGenWorkflow] Spark check: available=${sparkCheck.available} ` +
+      `recommendation=${sparkCheck.recommendation} reason=${sparkCheck.reason}`
+    );
+
     // Step 1: Check provider availability
     const availability = await step.do(
       'check-availability',
@@ -177,8 +207,28 @@ export class TextGenerationWorkflow extends WorkflowEntrypoint<TextGenerationEnv
 
     console.log(`[TextGenWorkflow] Provider availability:`, JSON.stringify(availability));
 
+    // Build effective waterfall based on Spark availability
+    // If Spark recommends use_local, promote nemotron to position #1
+    // If Spark recommends use_cloud, skip nemotron entirely (save the timeout)
+    let effectiveWaterfall: TextProvider[];
+    if (sparkCheck.recommendation === 'use_local') {
+      // Promote nemotron to top — it's healthy and local (free)
+      effectiveWaterfall = [
+        'nemotron',
+        ...PROVIDER_WATERFALL.filter(p => p !== 'nemotron'),
+      ];
+      console.log('[TextGenWorkflow] Spark available — promoting nemotron to top of waterfall');
+    } else if (sparkCheck.recommendation === 'use_cloud') {
+      // Skip nemotron — Spark is down or busy
+      effectiveWaterfall = PROVIDER_WATERFALL.filter(p => p !== 'nemotron');
+      console.log('[TextGenWorkflow] Spark unavailable — removing nemotron from waterfall');
+    } else {
+      // 'queue' or unknown — use default order
+      effectiveWaterfall = [...PROVIDER_WATERFALL];
+    }
+
     // Step 2: Try providers in waterfall order
-    for (const provider of PROVIDER_WATERFALL) {
+    for (const provider of effectiveWaterfall) {
       const status = availability.find(a => a.provider === provider);
 
       // Skip unavailable providers
