@@ -101,6 +101,7 @@ DEFAULT_MODEL_WATERFALL = "claude-sonnet-4.5,gemini-2.0-flash-exp,claude-opus-4.
 # - NEXUS_PASSPHRASE (for Nexus MCP server write access)
 # - NTFY_TOPIC (optional - for quarantine notifications)
 # - CF_AIG_TOKEN (Cloudflare AI Gateway token - routes API calls through Gateway)
+# - CF_ACCOUNT_TOKEN (Cloudflare API token - for /queue/stats workflow instance listing)
 # - ZAI_API_KEY (for z.ai API - direct, not through Gateway)
 # - ANTHROPIC_API_KEY (fallback if CF_AIG_TOKEN not set)
 # - GEMINI_API_KEY (fallback if CF_AIG_TOKEN not set)

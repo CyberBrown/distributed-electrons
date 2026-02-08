@@ -38,6 +38,72 @@ interface Env {
   PRODUCT_SHIPPING_RESEARCH_WORKFLOW: Workflow;
   // Auth secret for external trigger requests
   NEXUS_PASSPHRASE?: string;
+  // Cloudflare API token for workflow instance listing (CF_ACCOUNT_TOKEN secret)
+  CF_ACCOUNT_TOKEN?: string;
+  // AI Gateway URL (contains account ID)
+  AI_GATEWAY_URL?: string;
+}
+
+// Workflow names as registered in wrangler.toml
+const WORKFLOW_NAMES = [
+  'prime-workflow',
+  'text-generation-workflow',
+  'code-execution-workflow',
+  'image-generation-workflow',
+  'audio-generation-workflow',
+  'video-render-workflow',
+  'product-shipping-research-workflow',
+] as const;
+
+// Short display names for the stats response
+const WORKFLOW_DISPLAY_NAMES: Record<string, string> = {
+  'prime-workflow': 'prime',
+  'text-generation-workflow': 'text-generation',
+  'code-execution-workflow': 'code-execution',
+  'image-generation-workflow': 'image-generation',
+  'audio-generation-workflow': 'audio-generation',
+  'video-render-workflow': 'video-render',
+  'product-shipping-research-workflow': 'product-shipping-research',
+};
+
+/**
+ * Query Cloudflare Workflows REST API for instance counts by status
+ */
+async function getWorkflowStats(
+  accountId: string,
+  apiToken: string,
+  workflowName: string,
+): Promise<{ running: number; queued: number }> {
+  const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/workflows/${workflowName}/instances`;
+
+  const fetchCount = async (status: string): Promise<number> => {
+    try {
+      const res = await fetch(`${baseUrl}?status=${status}&per_page=1`, {
+        headers: { Authorization: `Bearer ${apiToken}` },
+      });
+      if (!res.ok) return 0;
+      const data = await res.json() as { result_info?: { total_count?: number } };
+      return data.result_info?.total_count ?? 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const [running, queued] = await Promise.all([
+    fetchCount('running'),
+    fetchCount('queued'),
+  ]);
+
+  return { running, queued };
+}
+
+/**
+ * Extract account ID from AI_GATEWAY_URL
+ * Format: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}
+ */
+function extractAccountId(gatewayUrl: string): string | null {
+  const match = gatewayUrl.match(/\/v1\/([a-f0-9]+)\//);
+  return match?.[1] ?? null;
 }
 
 // =========================================================================
@@ -144,6 +210,48 @@ export default {
           'audio-generation-workflow',
           'product-shipping-research-workflow',
         ],
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // =========================================================================
+    // GET /queue/stats - Queue depth visibility for routing intelligence
+    // =========================================================================
+    if (url.pathname === '/queue/stats' && request.method === 'GET') {
+      const apiToken = env.CF_ACCOUNT_TOKEN;
+      const gatewayUrl = env.AI_GATEWAY_URL;
+      const accountId = gatewayUrl ? extractAccountId(gatewayUrl) : null;
+
+      if (!apiToken || !accountId) {
+        return Response.json({
+          error: 'CF_ACCOUNT_TOKEN secret not set or AI_GATEWAY_URL missing',
+          hint: 'Run: wrangler secret put CF_ACCOUNT_TOKEN --name de-workflows',
+        }, { status: 503 });
+      }
+
+      // Query all workflows in parallel
+      const results = await Promise.all(
+        WORKFLOW_NAMES.map(async (name) => {
+          const stats = await getWorkflowStats(accountId, apiToken, name);
+          return { name, stats };
+        }),
+      );
+
+      const activeWorkflows: Record<string, { running: number; queued: number }> = {};
+      let totalRunning = 0;
+      let totalQueued = 0;
+
+      for (const { name, stats } of results) {
+        const displayName = WORKFLOW_DISPLAY_NAMES[name] || name;
+        activeWorkflows[displayName] = stats;
+        totalRunning += stats.running;
+        totalQueued += stats.queued;
+      }
+
+      return Response.json({
+        active_workflows: activeWorkflows,
+        total_running: totalRunning,
+        total_queued: totalQueued,
         timestamp: new Date().toISOString(),
       });
     }
@@ -543,6 +651,7 @@ export default {
       error: 'Not found',
       available_endpoints: [
         'GET /health',
+        'GET /queue/stats (workflow queue depth visibility)',
         'GET /test-routing (verify /execute routes through PrimeWorkflow)',
         'POST /execute (single entry point - triggers PrimeWorkflow)',
         'GET /status/:id',
