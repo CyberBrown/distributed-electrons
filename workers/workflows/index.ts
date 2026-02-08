@@ -42,6 +42,8 @@ interface Env {
   CF_ACCOUNT_TOKEN?: string;
   // AI Gateway URL (contains account ID)
   AI_GATEWAY_URL?: string;
+  // Spark Gateway URL for waterfall routing and status proxy
+  SPARK_GATEWAY_URL?: string;
 }
 
 // Workflow names as registered in wrangler.toml
@@ -254,6 +256,87 @@ export default {
         total_queued: totalQueued,
         timestamp: new Date().toISOString(),
       });
+    }
+
+    // =========================================================================
+    // GET /spark/status - Combined Spark GPU + service status (proxied)
+    // =========================================================================
+    if (url.pathname === '/spark/status' && request.method === 'GET') {
+      const gatewayUrl = env.SPARK_GATEWAY_URL;
+      if (!gatewayUrl) {
+        return Response.json({ error: 'Spark Gateway not configured' }, { status: 503 });
+      }
+
+      try {
+        const [gpu, services] = await Promise.all([
+          fetch(`${gatewayUrl}/gpu`, { signal: AbortSignal.timeout(5000) })
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null),
+          fetch(`${gatewayUrl}/services`, { signal: AbortSignal.timeout(5000) })
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null),
+        ]);
+
+        return Response.json({
+          spark_reachable: !!(gpu || services),
+          gpu: gpu || { error: 'unreachable' },
+          services: services || { error: 'unreachable' },
+          timestamp: new Date().toISOString(),
+        });
+      } catch {
+        return Response.json(
+          { spark_reachable: false, error: 'Gateway unreachable' },
+          { status: 503 }
+        );
+      }
+    }
+
+    // =========================================================================
+    // GET /spark/available/:type - Check Spark availability for a service type
+    // =========================================================================
+    if (url.pathname.startsWith('/spark/available/') && request.method === 'GET') {
+      const serviceType = url.pathname.replace('/spark/available/', '');
+      const mode = url.searchParams.get('mode') || 'waterfall';
+      const gatewayUrl = env.SPARK_GATEWAY_URL;
+
+      if (!gatewayUrl) {
+        return Response.json({
+          available: false,
+          service: serviceType,
+          reason: 'Spark Gateway not configured',
+          gpu_memory_free_mb: 0,
+          gpu_utilization_pct: 0,
+          recommendation: 'use_cloud',
+        });
+      }
+
+      try {
+        const resp = await fetch(
+          `${gatewayUrl}/available/${serviceType}?mode=${mode}`,
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (!resp.ok) {
+          return Response.json({
+            available: false,
+            service: serviceType,
+            reason: `Spark Gateway returned ${resp.status}`,
+            gpu_memory_free_mb: 0,
+            gpu_utilization_pct: 0,
+            recommendation: 'use_cloud',
+          });
+        }
+        const result = await resp.json();
+        return Response.json(result);
+      } catch {
+        return Response.json({
+          available: false,
+          service: serviceType,
+          reason: 'Spark Gateway unreachable',
+          gpu_memory_free_mb: 0,
+          gpu_utilization_pct: 0,
+          recommendation: 'use_cloud',
+        });
+      }
     }
 
     // =========================================================================
@@ -652,6 +735,8 @@ export default {
       available_endpoints: [
         'GET /health',
         'GET /queue/stats (workflow queue depth visibility)',
+        'GET /spark/status (Spark GPU + service status)',
+        'GET /spark/available/:type (check Spark availability for waterfall)',
         'GET /test-routing (verify /execute routes through PrimeWorkflow)',
         'POST /execute (single entry point - triggers PrimeWorkflow)',
         'GET /status/:id',
